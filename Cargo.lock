@@ -5573,6 +5573,7 @@ checksum = "b7401a30af6cb5818bb64852270bb722533397edcfc7344954a38f420819ece2"
 name = "surface"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "fontdue",
  "png 0.17.16",
  "qsys",

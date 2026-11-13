@@ -341,7 +341,7 @@ fn editing_ends_after_five_seconds_without_input() {
     // Turning now moves to the next control instead of changing the knob.
     assert!(app.handle(Turn(1), 10_500).is_empty());
     assert_eq!(focused(&app), "led.1");
-    assert!(!app.tick(60_000), "browsing does not time out");
+    assert!(!app.tick(30_000), "browsing does not time out");
 }
 
 #[test]
@@ -414,11 +414,19 @@ fn settings_close_the_list_and_switch_the_hints() {
     assert!(app.settings.hints);
     run(&mut app, &[Down, Up, Click]);
     assert!(!app.settings.hints, "a click switches the helper text");
+    // The idle delay steps 1 min, 5 min, never, 30 s; the clock switches.
+    assert_eq!(app.settings.idle_s, Some(60));
+    run(&mut app, &[Turn(1), Down, Up, Click]);
+    assert_eq!(app.settings.idle_s, Some(300));
+    run(&mut app, &[Down, Up, Click, Down, Up, Click]);
+    assert_eq!(app.settings.idle_s, Some(30));
+    run(&mut app, &[Turn(1), Down, Up, Click]);
+    assert!(app.settings.clock24);
     // Network, and back.
     run(&mut app, &[Turn(1), Down, Up, Click]);
     assert_eq!(app.mode, Mode::Network);
     run(&mut app, &[Down, Up, Click]);
-    assert_eq!(app.mode, Mode::Settings { focus: 1 });
+    assert_eq!(app.mode, Mode::Settings { focus: 3 });
     // The last row, and a hold, go back to the list.
     run(&mut app, &[Turn(1), Down, Up, Click]);
     assert_eq!(app.mode, Mode::Menu { focus: SETTINGS });
@@ -443,7 +451,72 @@ fn settings_are_reachable_with_nothing_to_show() {
 
 #[test]
 fn settings_survive_a_round_trip_through_json() {
-    let s = Settings { hints: false };
+    let s = Settings { hints: false, idle_s: None, clock24: true };
+    assert_eq!(Settings::from_json(&s.to_json()), s);
+    let s = Settings { hints: true, idle_s: Some(300), clock24: false };
     assert_eq!(Settings::from_json(&s.to_json()), s);
     assert_eq!(Settings::from_json(&json!({})), Settings::default(), "missing fields keep defaults");
+}
+
+#[test]
+fn goes_idle_after_the_delay_and_the_first_input_only_wakes() {
+    let mut app = design();
+    open(&mut app, "Zone1");
+    app.handle(Turn(1), 1_000);
+    assert!(!app.tick(60_999));
+    assert!(app.tick(61_000), "a minute without input");
+    assert!(app.idle);
+    // A turn wakes it and changes nothing.
+    assert!(app.handle(Turn(5), 70_000).is_empty());
+    assert!(!app.idle);
+    assert_eq!(app.current().unwrap().title, "Zone1", "back where it was");
+    // Idle again: a click wakes it, and its release and click are dropped.
+    app.tick(200_000);
+    assert!(app.idle);
+    assert!(app.handle(Down, 200_100).is_empty());
+    assert!(app.handle(Up, 200_200).is_empty());
+    assert!(app.handle(Click, 200_200).is_empty(), "the waking click does not mute");
+    assert!(!app.current().unwrap().muted());
+    // The next click acts.
+    assert_eq!(app.handle(Click, 201_000), [set("NEST_Zone1", "mute", json!(true))]);
+}
+
+#[test]
+fn never_idle_when_set_so_or_while_a_momentary_is_held() {
+    let mut app = design();
+    app.settings.idle_s = None;
+    assert!(!app.tick(10_000_000));
+    app.settings.idle_s = Some(30);
+    run(&mut app, &[Turn(2), Down]);
+    assert_eq!(focused(&app), "momentary.1");
+    assert!(!app.tick(100_000), "held down, it stays awake");
+}
+
+#[test]
+fn renders_the_home_screen() {
+    let mut app = design();
+    app.idle = true;
+    app.clock = surface::app::Clock { hour: 15, minute: 7, date: "Thursday 13 November".into() };
+    let mut canvas = Canvas::new(FACE);
+    render(&app, &mut canvas);
+    app.settings.clock24 = true;
+    render(&app, &mut canvas);
+}
+
+#[test]
+fn names_controls_readably() {
+    use surface::app::pretty_name;
+    let panel = ["led.1", "meter.1", "momentary.1", "text.1", "text.display.1", "toggle.1", "trigger.1"];
+    let names: Vec<String> = panel.iter().map(|n| pretty_name(n, &panel)).collect();
+    assert_eq!(names, ["LED", "Meter", "Momentary", "Text", "Display", "Toggle", "Trigger"]);
+    let two = ["toggle.1", "toggle.2"];
+    assert_eq!(pretty_name("toggle.2", &two), "Toggle 2", "the index kept when shared");
+    assert_eq!(pretty_name("gain", &["gain"]), "Gain");
+    assert_eq!(pretty_name("Control", &["Control"]), "Control");
+    assert_eq!(pretty_name("input_level", &[]), "Input Level");
+    // The design's Legend wins.
+    let mut app = design();
+    let legend = json!({"Component": "NEST_Panel", "Name": "toggle.1", "String": "false", "Value": 0.0, "Legend": "Lights"});
+    app.apply(&Change::from_json(&legend).unwrap());
+    assert_eq!(app.screens[0].items.iter().find(|i| i.control.name == "toggle.1").unwrap().label, "Lights");
 }

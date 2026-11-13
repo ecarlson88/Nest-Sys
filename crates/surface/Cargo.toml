@@ -9,3 +9,4 @@ qsys = { path = "../qsys" }
 serde_json = "1"
 fontdue = { version = "0.9", default-features = false, features = ["std"] }
 png = "0.17"
+chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }

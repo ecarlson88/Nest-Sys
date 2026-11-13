@@ -128,8 +128,8 @@ Settings (the Controls list's last entry): helper text on/off and a
 Network page; to add on hardware: screen timeout, brightness, and Wi-Fi
 details (SSID, signal) on the Network page.
 
-Ideas for later (from Erik): an idle/home screen (e.g. the time) to land on
-after a while without input. The Controls list and combo box choices roll
+Home screen: the time and date after the idle delay (Settings); on the
+unit, dim the backlight there too. The Controls list and combo box choices roll
 as a drum (render::Renderer keeps the drum's place between frames); on the
 unit, check the frame rate the CPU manages for full-face redraws.
 
