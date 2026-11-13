@@ -86,7 +86,10 @@ Then open http://127.0.0.1:8480.
 | click | mouse button on the face, or Space |
 | hold the click (0.7 s) | hold the mouse button or Space |
 
-- **On a screen:** the ring moves between the component's controls, and
+- **A Gain component** is a volume knob: the ring sets the level as it
+  turns, a click mutes or unmutes, a hold opens the list of components.
+  Its bypass and invert are not shown.
+- **On any other screen:** the ring moves between the component's controls, and
   after the last one to a **Components** stop; clicking it opens the list of
   components. A click on a control flips a toggle, fires a trigger, or opens
   a dial or combo box for editing. A momentary button is on while the click
@@ -97,6 +100,9 @@ Then open http://127.0.0.1:8480.
   (a combo box's choice is then dropped).
 - **Hold** on a screen is a shortcut to the list of components. There, the ring moves,
   a click opens a component, and a hold goes back.
+
+Controls the Core reports Invisible or Disabled are left off, and a
+component whose bypass is on disappears from the Nest until it goes off.
 
 The first build downloads and compiles dependencies and takes a few
 minutes. Options: `--port`, `--user`/`--password`, `--prefix`,

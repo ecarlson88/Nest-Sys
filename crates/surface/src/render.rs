@@ -3,7 +3,7 @@
 use qsys::{Control, Widget};
 use serde_json::Value;
 
-use crate::app::{App, Item, Mode};
+use crate::app::{App, Item, Layout, Mode, Screen};
 use crate::canvas::{Canvas, FACE};
 
 const BG: u32 = 0x000000;
@@ -43,6 +43,7 @@ pub fn render(app: &App, canvas: &mut Canvas) {
             canvas.text_centred(C, 300, "Code Name + Script Access", 1, WIDE, DIM);
         }
         (Some(_), Mode::Menu { focus }) => menu(app, focus, canvas),
+        (Some(screen), _) if matches!(screen.layout, Layout::Volume { .. }) => volume(screen, canvas),
         (Some(screen), mode) => {
             canvas.text_centred(C, 58, &screen.title, 2, 300, DIM);
             if let Some(item) = app.focused() {
@@ -58,7 +59,8 @@ pub fn render(app: &App, canvas: &mut Canvas) {
                 }
                 hint(canvas, "click for the list of components");
             }
-            dots(app.focus, screen.items.len() + 1, canvas);
+            let stops = screen.stops();
+            dots(stops.iter().position(|&i| i == app.focus).unwrap_or(0), stops.len(), canvas);
         }
     }
     canvas.mask_round();
@@ -66,19 +68,49 @@ pub fn render(app: &App, canvas: &mut Canvas) {
 
 fn menu(app: &App, focus: usize, canvas: &mut Canvas) {
     canvas.text_centred(C, 58, "Components", 2, 300, DIM);
-    let n = app.screens.len();
+    let shown = app.shown_screens();
+    let n = shown.len();
+    let at = shown.iter().position(|&i| i == focus).unwrap_or(0);
     if n > 1 {
-        let prev = (focus + n - 1) % n;
-        canvas.text_centred(C, 168, &app.screens[prev].title, 2, WIDE, DIM);
+        canvas.text_centred(C, 168, &app.screens[shown[(at + n - 1) % n]].title, 2, WIDE, DIM);
     }
     canvas.fill_rect(70, 214, 340, 52, FAINT);
     canvas.text_centred(C, 228, &app.screens[focus].title, 3, 330, FG);
     if n > 2 {
-        let next = (focus + 1) % n;
-        canvas.text_centred(C, 296, &app.screens[next].title, 2, WIDE, DIM);
+        canvas.text_centred(C, 296, &app.screens[shown[(at + 1) % n]].title, 2, WIDE, DIM);
     }
     canvas.text_centred(C, 380, "click opens, hold goes back", 1, WIDE, DIM);
-    dots(focus, n, canvas);
+    dots(at, n, canvas);
+}
+
+/// A gain component: its level on a dial, its mute by a click.
+fn volume(screen: &Screen, canvas: &mut Canvas) {
+    let Layout::Volume { gain, mute } = screen.layout else { return };
+    let c = &screen.items[gain].control;
+    let muted = screen.muted();
+    canvas.text_centred(C, 70, &screen.title, 3, 300, FG);
+    let (min, max) = c.range().unwrap_or((0.0, 1.0));
+    let v = c.value.as_f64().unwrap_or(min);
+    let f = ((v - min) / (max - min)).clamp(0.0, 1.0) as f32;
+    canvas.arc(C, 252, 150.0, 132.0, 135.0, 270.0, FAINT);
+    if f > 0.0 {
+        canvas.arc(C, 252, 150.0, 132.0, 135.0, 270.0 * f, if muted { DIM } else { ACCENT });
+    }
+    canvas.text_centred(C, 222, &shown(c), 4, 230, if muted { DIM } else { FG });
+    if muted {
+        canvas.text_centred(C, 272, "MUTED", 3, 230, EDIT);
+    }
+    let lo = c.string_min.clone().unwrap_or_else(|| min.to_string());
+    let hi = c.string_max.clone().unwrap_or_else(|| max.to_string());
+    canvas.text_centred(C - 104, 380, &lo, 1, 90, DIM);
+    canvas.text_centred(C + 104, 380, &hi, 1, 90, DIM);
+    let hint_text = match mute.filter(|&m| screen.items[m].shown()) {
+        Some(_) if muted => "turn for level, click to unmute",
+        Some(_) => "turn for level, click to mute",
+        None => "turn for level",
+    };
+    hint(canvas, hint_text);
+    canvas.text_centred(C, 418, "hold for components", 1, 300, DIM);
 }
 
 /// Where the focus is among n: dots, or "i / n" when they would not fit.
