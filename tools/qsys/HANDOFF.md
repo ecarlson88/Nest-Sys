@@ -40,7 +40,8 @@ No hardware yet; shopping for cheap used Gen 3 units on eBay.
 - Custom Controls' control names contain dots (`text.1`, `text.display.1`). The `NEST_` prefix is matched **in any case** (`Nest_Combo` counts).
 - A component with Script Access None is not listed by `GetComponents` at all (`Nest_hidden` was in the design and absent).
 - Custom Controls has no combo box; use a Text Controller (`tools/qsys/combo_box.lua`). Knobs are Gain components set to knob style.
-- **A combo box's choices are not in `GetControls`**: a Text Controller's combo (`combo_box.lua`) reports only `Type: Text` and its current `String`. Whether `Component.Get` or a change group reports them is being checked (`qrc_discover.py --get Nest_Combo.Control --raw`). **[open]**
+- **A combo box's choices are not in `GetControls`, but `Component.Get` and every `ChangeGroup.Poll` change carry `Choices`** (a Text Controller combo, `combo_box.lua`). Discovery fetches them with one `Component.Get` per component for its Text controls; a Text control with choices becomes a picker.
+- `Component.Get` and polls report **no `Type`**, **Booleans as `0.0`/`1.0`** (not `true`/`false` as in `GetControls`) and a Text control's `Value` as a meaningless `0.0` (its text is `String`). Polls also carry `Legend`, `Disabled`, `Invisible`, `Color`, `CssClass`, `Indeterminate`; `Choices` is `[]` on Custom Controls and absent on gain controls.
 - A Text Controller's single control is named `Control` (no index). Its script's own controls (`code`, `log.*`, `script.*`, ...) change often (log, memory), so they are left out of change groups.
 - Momentary buttons report inconsistent edges over polling and are rarely used in designs: supported simply (true on press, false on release), not worth more time.
 - Change groups: the first `Poll` reports every subscribed control; changes include `Component`. `Component.Set` works for Float and Boolean.

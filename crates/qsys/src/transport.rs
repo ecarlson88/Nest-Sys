@@ -6,7 +6,7 @@ use std::io::{Read, Write};
 use serde_json::Value;
 
 use crate::client::{Change, Client, Result};
-use crate::control::{Component, Control};
+use crate::control::{Component, Control, Kind};
 
 /// A component found by discovery, with its controls.
 #[derive(Clone, Debug, PartialEq)]
@@ -17,7 +17,7 @@ pub struct Discovered {
 
 pub trait Transport {
     /// The components whose Code Name starts with prefix (in any case), in
-    /// the Core's order, with their controls.
+    /// the Core's order, with their controls (combo boxes' choices included).
     fn list(&mut self, prefix: &str) -> Result<Vec<Discovered>>;
     /// One control's current state.
     fn get(&mut self, component: &str, control: &str) -> Result<Change>;
@@ -46,7 +46,20 @@ impl<S: Read + Write> Transport for Qrc<S> {
         let components = self.client.components()?;
         let mut found = Vec::new();
         for component in components.into_iter().filter(|c| crate::has_prefix(&c.name, prefix)) {
-            let controls = self.client.controls(&component.name)?;
+            let mut controls = self.client.controls(&component.name)?;
+            // GetControls leaves out combo boxes' choices; Get has them.
+            let text: Vec<&str> =
+                controls.iter().filter(|c| c.kind == Kind::Text).map(|c| c.name.as_str()).collect();
+            if !text.is_empty() {
+                for state in self.client.get(&component.name, &text)? {
+                    let choices = state.choices.filter(|c| !c.is_empty());
+                    if let Some(c) = controls.iter_mut().find(|c| c.name == state.name) {
+                        if choices.is_some() {
+                            c.choices = choices;
+                        }
+                    }
+                }
+            }
             found.push(Discovered { component, controls });
         }
         Ok(found)

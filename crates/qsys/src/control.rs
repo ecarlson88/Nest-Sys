@@ -9,6 +9,9 @@
 //! display text) are Read/Write too. Script components have controls without
 //! a Type. Every field but Name stays optional; missing ones are reported
 //! (see widget::Note) rather than refused.
+//!
+//! GetControls never gives a combo box's Choices; Component.Get and change
+//! group polls do (see client::Change), and Transport::list fills them in.
 
 use serde_json::Value;
 
@@ -103,7 +106,7 @@ pub struct Control {
     pub position: Option<f64>,
     pub min: Option<f64>,
     pub max: Option<f64>,
-    /// A combo box's options. Expected from QRC, not yet seen from a Core.
+    /// A combo box's options: from Component.Get (GetControls has none).
     pub choices: Option<Vec<String>>,
     /// The ends of the range as the Core renders them (e.g. "-100dB").
     pub string_min: Option<String>,
@@ -142,6 +145,12 @@ impl Control {
         })
     }
 
+    /// The value as on or off: Booleans are true/false from GetControls but
+    /// 0.0/1.0 from Component.Get and polls.
+    pub fn is_on(&self) -> bool {
+        truthy(&self.value)
+    }
+
     /// The range when both ends are given and min < max.
     pub fn range(&self) -> Option<(f64, f64)> {
         match (self.min, self.max) {
@@ -158,6 +167,15 @@ impl Control {
             (None, Value::String(s)) => s.clone(),
             (None, v) => v.to_string(),
         }
+    }
+}
+
+/// A Boolean control's value in any of the forms the Core sends.
+pub fn truthy(v: &Value) -> bool {
+    match v {
+        Value::Bool(b) => *b,
+        Value::Number(n) => n.as_f64().is_some_and(|f| f != 0.0),
+        _ => false,
     }
 }
 
