@@ -5,7 +5,9 @@
 //!     cargo run -p surface --bin sim -- CORE_HOST [--port 1710]
 //!         [--user U --password P] [--prefix NEST_] [--listen 127.0.0.1:8480]
 //!
-//! then open http://127.0.0.1:8480.
+//! then open http://127.0.0.1:8480. When the Core goes away (Designer
+//! leaving emulation, say), it shows "Connecting…" and tries again every
+//! two seconds, discovering the design afresh when it is back.
 
 use std::collections::BTreeMap;
 use std::io::{Read, Write};
@@ -17,7 +19,7 @@ use qsys::{Client, Qrc, Transport, DEFAULT_PORT, PREFIX};
 use surface::app::{App, Set};
 use surface::canvas::{Canvas, FACE};
 use surface::input::{Button, Event};
-use surface::render::render;
+use surface::render::{render, status};
 
 const PAGE: &str = include_str!("sim.html");
 const POLL_EVERY: Duration = Duration::from_millis(200);
@@ -108,27 +110,82 @@ fn now_ms(start: Instant) -> u64 {
     start.elapsed().as_millis() as u64
 }
 
-fn run(a: Args) -> qsys::Result<()> {
-    let mut q = Qrc::new(Client::connect(&a.host, a.port, Duration::from_secs(5))?);
+/// A connection to the Core and the screen built from what it reported.
+struct Session {
+    q: Qrc<TcpStream>,
+    app: App,
+}
+
+/// Connects, discovers the design and follows its controls.
+fn connect(a: &Args) -> qsys::Result<Session> {
+    let mut q = Qrc::new(Client::connect(&a.host, a.port, Duration::from_secs(3))?);
     if let Some(user) = &a.user {
         q.client.logon(user, &a.password)?;
     }
-    let mut app = App::new(q.list(&a.prefix)?, &a.prefix);
+    let app = App::new(q.list(&a.prefix)?, &a.prefix);
     for (component, controls) in app.watched() {
         let names: Vec<&str> = controls.iter().map(String::as_str).collect();
         q.subscribe(&component, &names)?;
     }
-    println!("{} screens; open http://{}", app.screens.len(), a.listen);
+    Ok(Session { q, app })
+}
 
+/// Whether an error means the connection is gone (rather than the Core
+/// refusing one request).
+fn lost(e: &qsys::Error) -> bool {
+    !matches!(e, qsys::Error::Rpc { .. })
+}
+
+/// One round with the Core: the inputs, the values to send, the changes.
+fn exchange(s: &mut Session, events: Vec<Event>, t: u64, poll: bool, noop: bool) -> qsys::Result<bool> {
+    let mut dirty = s.app.tick(t);
+    // A dial's turns are sent as one value per round of the loop.
+    let mut sets: BTreeMap<(String, String), Set> = BTreeMap::new();
+    for ev in events {
+        for set in s.app.handle(ev, t) {
+            sets.insert((set.component.clone(), set.control.clone()), set);
+        }
+        dirty = true;
+    }
+    for set in sets.into_values() {
+        if let Err(e) = s.q.set(&set.component, &set.control, set.value) {
+            if lost(&e) {
+                return Err(e);
+            }
+            eprintln!("{}.{}: {e}", set.component, set.control);
+        }
+    }
+    if poll {
+        for change in s.q.poll()? {
+            s.app.apply(&change);
+            dirty = true;
+        }
+    }
+    if noop {
+        s.q.client.noop()?;
+    }
+    s.q.client.take_notifications();
+    Ok(dirty)
+}
+
+const RETRY_EVERY: Duration = Duration::from_secs(2);
+
+fn run(a: Args) -> std::io::Result<()> {
     let listener = TcpListener::bind(&a.listen)?;
     listener.set_nonblocking(true)?;
+    println!("open http://{}", a.listen);
     let start = Instant::now();
     let mut button = Button::default();
     let mut canvas = Canvas::new(FACE);
     let mut frame = Vec::new();
     let mut version = 0u64;
     let mut dirty = true;
-    let mut last_poll = Instant::now() - POLL_EVERY;
+    let mut session: Option<Session> = None;
+    // The screen to come back to after a reconnect, by component.
+    let mut last_screen: Option<String> = None;
+    let mut next_try = Instant::now();
+    let mut trouble = String::from("Starting");
+    let mut last_poll = Instant::now();
     let mut last_noop = Instant::now();
 
     loop {
@@ -152,39 +209,62 @@ fn run(a: Args) -> qsys::Result<()> {
                 _ => respond(&mut stream, "404 Not Found", "text/plain", b"not found"),
             }
         }
-        events.extend(button.tick(now_ms(start)));
-
-        // A dial's turns are sent as one value per round of the loop.
-        let mut sets: BTreeMap<(String, String), Set> = BTreeMap::new();
         let t = now_ms(start);
-        if app.tick(t) {
-            dirty = true;
-        }
-        for ev in events {
-            for set in app.handle(ev, t) {
-                sets.insert((set.component.clone(), set.control.clone()), set);
+        events.extend(button.tick(t));
+
+        if session.is_none() && Instant::now() >= next_try {
+            match connect(&a) {
+                Ok(mut s) => {
+                    println!("connected to {}:{}: {} screens", a.host, a.port, s.app.screens.len());
+                    if let Some(name) = &last_screen {
+                        if let Some(i) = s.app.screens.iter().position(|sc| &sc.component.name == name) {
+                            s.app.screen = i;
+                            s.app.focus = s.app.screens[i].stops()[0];
+                        }
+                    }
+                    session = Some(s);
+                    last_poll = Instant::now() - POLL_EVERY;
+                    last_noop = Instant::now();
+                }
+                Err(e) => {
+                    let why = e.to_string();
+                    if why != trouble {
+                        eprintln!("cannot reach {}:{}: {why}; trying again every {}s", a.host, a.port, RETRY_EVERY.as_secs());
+                        trouble = why;
+                    }
+                    next_try = Instant::now() + RETRY_EVERY;
+                }
             }
             dirty = true;
-        }
-        for set in sets.into_values() {
-            q.set(&set.component, &set.control, set.value)?;
         }
 
-        if last_poll.elapsed() >= POLL_EVERY {
-            last_poll = Instant::now();
-            for change in q.poll()? {
-                app.apply(&change);
-                dirty = true;
+        if let Some(s) = &mut session {
+            let poll = last_poll.elapsed() >= POLL_EVERY;
+            let noop = last_noop.elapsed() >= NOOP_EVERY;
+            if poll {
+                last_poll = Instant::now();
+            }
+            if noop {
+                last_noop = Instant::now();
+            }
+            match exchange(s, events, t, poll, noop) {
+                Ok(changed) => dirty |= changed,
+                Err(e) => {
+                    eprintln!("lost the Core: {e}; reconnecting");
+                    last_screen = s.app.current().map(|sc| sc.component.name.clone());
+                    trouble = e.to_string();
+                    session = None;
+                    next_try = Instant::now() + RETRY_EVERY / 2;
+                    dirty = true;
+                }
             }
         }
-        if last_noop.elapsed() >= NOOP_EVERY {
-            last_noop = Instant::now();
-            q.client.noop()?;
-        }
-        q.client.take_notifications();
 
         if dirty {
-            render(&app, &mut canvas);
+            match &session {
+                Some(s) => render(&s.app, &mut canvas),
+                None => status(&mut canvas, "Connecting…", &format!("{}:{} — {trouble}", a.host, a.port)),
+            }
             frame = canvas.to_png();
             version += 1;
             dirty = false;

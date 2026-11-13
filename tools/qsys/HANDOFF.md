@@ -118,12 +118,15 @@ Disabled controls and bypassed components are not shown (decided
 round face, `canvas::to_panel` lays it out turned and packed for the gen 3's
 480x640 panel, and `input` turns `REL_DIAL` counts (120 a detent, negative
 clockwise) and `KEY_ENTER` into turns, clicks and holds. The `sim` binary
-runs it against a Core in a browser (`tools/qsys/README.md`). Still to do
-for the unit: a framebuffer and evdev backend in place of the browser, and
-reconnecting when the Core goes away.
+runs it against a Core in a browser (`tools/qsys/README.md`). The simulator
+reconnects when the Core goes away and rediscovers the design. Still to do
+for the unit: a framebuffer and evdev backend in place of the browser.
+Text is Inter (`crates/surface/fonts`, OFL) drawn with fontdue; shapes are
+anti-aliased.
 
 Ideas for later (from Erik): an idle/home screen (e.g. the time) to land on
-after a while without input.
+after a while without input; the Controls list and combo box choices
+falling away as they scroll (animation).
 
 ## Suggested milestones
 
