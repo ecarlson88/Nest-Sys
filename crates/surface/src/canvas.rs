@@ -131,6 +131,45 @@ pub struct Canvas {
     pub size: usize,
     pub pixels: Vec<u32>,
     pub fonts: Fonts,
+    /// The round face's edge, row by row (made on first use).
+    mask: Vec<MaskRow>,
+}
+
+/// A row of the round mask: pixels before `from` and from `to` on are
+/// outside; `edge` lists the part-covered ones with their coverage.
+struct MaskRow {
+    from: usize,
+    to: usize,
+    edge: Vec<(usize, f32)>,
+}
+
+fn round_mask(size: usize) -> Vec<MaskRow> {
+    let c = size as f32 / 2.0;
+    (0..size)
+        .map(|y| {
+            let mut row = MaskRow { from: size, to: size, edge: Vec::new() };
+            let mut first = None;
+            let mut last = 0;
+            for x in 0..size {
+                let (dx, dy) = (x as f32 + 0.5 - c, y as f32 + 0.5 - c);
+                let a = cover((dx * dx + dy * dy).sqrt() - c);
+                if a > 0.0 {
+                    first.get_or_insert(x);
+                    last = x;
+                    if a < 1.0 {
+                        row.edge.push((x, a));
+                    }
+                }
+            }
+            if let Some(f) = first {
+                row.from = f;
+                row.to = last + 1;
+            } else {
+                row.from = size;
+            }
+            row
+        })
+        .collect()
 }
 
 /// One channel's place in a panel pixel, as fb_var_screeninfo gives it.
@@ -187,7 +226,7 @@ fn cover(d: f32) -> f32 {
 
 impl Canvas {
     pub fn new(size: usize) -> Canvas {
-        Canvas { size, pixels: vec![0; size * size], fonts: Fonts::new() }
+        Canvas { size, pixels: vec![0; size * size], fonts: Fonts::new(), mask: Vec::new() }
     }
 
     pub fn clear(&mut self, rgb: u32) {
@@ -206,27 +245,42 @@ impl Canvas {
         self.pixels[i] = if a >= 1.0 { rgb } else { mix(self.pixels[i], rgb, a) };
     }
 
-    /// Fills the pixels around (cx, cy) within r with the coverage `shape`
-    /// gives each pixel centre's offset from (cx, cy).
-    fn shade(&mut self, cx: f32, cy: f32, r: f32, rgb: u32, shape: impl Fn(f32, f32) -> f32) {
-        let (x0, x1) = ((cx - r - 1.0).floor() as i32, (cx + r + 1.0).ceil() as i32);
-        let (y0, y1) = ((cy - r - 1.0).floor() as i32, (cy + r + 1.0).ceil() as i32);
-        for y in y0..=y1 {
-            for x in x0..=x1 {
-                let a = shape(x as f32 + 0.5 - cx, y as f32 + 0.5 - cy);
-                self.blend(x, y, rgb, a);
+    /// Fills the pixels between radii `inner` and `outer` of (cx, cy) with
+    /// the coverage `shape` gives each pixel centre's offset from (cx, cy).
+    /// Only those pixels are visited, a row's span at a time: the ring of
+    /// a 480-wide arc is a sixth of its square.
+    #[allow(clippy::too_many_arguments)]
+    fn shade_ring(&mut self, cx: f32, cy: f32, outer: f32, inner: f32, rgb: u32, shape: impl Fn(f32, f32) -> f32) {
+        let (ro, ri) = (outer + 1.0, (inner - 1.0).max(0.0));
+        let (y0, y1) = ((cy - ro).floor() as i32, (cy + ro).ceil() as i32);
+        for y in y0.max(0)..=y1.min(self.size as i32 - 1) {
+            let dy = y as f32 + 0.5 - cy;
+            let wo = ro * ro - dy * dy;
+            if wo <= 0.0 {
+                continue;
+            }
+            let wo = wo.sqrt();
+            let wi = (ri * ri - dy * dy).max(0.0).sqrt();
+            let left = ((cx - wo).floor() as i32, (cx - wi).ceil() as i32);
+            let right = ((cx + wi).floor() as i32, (cx + wo).ceil() as i32);
+            let spans = if wi > 0.0 { [left, right] } else { [(left.0, right.1), (1, 0)] };
+            for (xa, xb) in spans {
+                for x in xa.max(0)..=xb.min(self.size as i32 - 1) {
+                    let a = shape(x as f32 + 0.5 - cx, dy);
+                    self.blend(x, y, rgb, a);
+                }
             }
         }
     }
 
     pub fn disc(&mut self, cx: f32, cy: f32, r: f32, rgb: u32) {
-        self.shade(cx, cy, r, rgb, |dx, dy| cover((dx * dx + dy * dy).sqrt() - r));
+        self.shade_ring(cx, cy, r, 0.0, rgb, |dx, dy| cover((dx * dx + dy * dy).sqrt() - r));
     }
 
     /// A circle's outline, `width` wide, centred on radius r.
     pub fn ring(&mut self, cx: f32, cy: f32, r: f32, width: f32, rgb: u32) {
         let h = width / 2.0;
-        self.shade(cx, cy, r + h, rgb, |dx, dy| cover(((dx * dx + dy * dy).sqrt() - r).abs() - h));
+        self.shade_ring(cx, cy, r + h, r - h, rgb, |dx, dy| cover(((dx * dx + dy * dy).sqrt() - r).abs() - h));
     }
 
     /// An arc of radius r, `width` wide with round ends, from `start`
@@ -241,11 +295,21 @@ impl Canvas {
         }
         let h = width / 2.0;
         let (a0, a1) = (start.to_radians(), (start + sweep).to_radians());
-        let ends = [(r * a0.cos(), r * a0.sin()), (r * a1.cos(), r * a1.sin())];
-        self.shade(cx, cy, r + h, rgb, |dx, dy| {
-            // Screen y runs down, so atan2 runs clockwise.
-            let a = dy.atan2(dx).to_degrees();
-            let d = if (a - start).rem_euclid(360.0) <= sweep {
+        let (s, e) = ((a0.cos(), a0.sin()), (a1.cos(), a1.sin()));
+        let ends = [(r * s.0, r * s.1), (r * e.0, r * e.1)];
+        // Whether a point lies within the sweep, by cross products with the
+        // start and end directions (positive is clockwise on screen): the
+        // sweep itself up to a half turn, else not within the rest.
+        let cross = |a: (f32, f32), b: (f32, f32)| a.0 * b.1 - a.1 * b.0;
+        let within = move |p: (f32, f32)| {
+            if sweep <= 180.0 {
+                cross(s, p) >= 0.0 && cross(p, e) >= 0.0
+            } else {
+                !(cross(e, p) > 0.0 && cross(p, s) > 0.0)
+            }
+        };
+        self.shade_ring(cx, cy, r + h, r - h, rgb, |dx, dy| {
+            let d = if within((dx, dy)) {
                 ((dx * dx + dy * dy).sqrt() - r).abs()
             } else {
                 ends.iter().map(|(ex, ey)| ((dx - ex).powi(2) + (dy - ey).powi(2)).sqrt()).fold(f32::MAX, f32::min)
@@ -257,28 +321,35 @@ impl Canvas {
     /// A line from (x0, y0) to (x1, y1), `width` wide with round ends; with
     /// x0 < x1 and a width as tall as wanted, a pill.
     pub fn line(&mut self, x0: f32, y0: f32, x1: f32, y1: f32, width: f32, rgb: u32) {
-        let (cx, cy) = ((x0 + x1) / 2.0, (y0 + y1) / 2.0);
         let (vx, vy) = (x1 - x0, y1 - y0);
         let len2 = (vx * vx + vy * vy).max(1e-6);
         let h = width / 2.0;
-        let reach = (len2.sqrt() / 2.0) + h;
-        self.shade(cx, cy, reach, rgb, |dx, dy| {
-            let (px, py) = (dx + cx - x0, dy + cy - y0);
-            let t = ((px * vx + py * vy) / len2).clamp(0.0, 1.0);
-            let (qx, qy) = (px - t * vx, py - t * vy);
-            cover((qx * qx + qy * qy).sqrt() - h)
-        });
+        let (xa, xb) = ((x0.min(x1) - h - 1.0).floor() as i32, (x0.max(x1) + h + 1.0).ceil() as i32);
+        let (ya, yb) = ((y0.min(y1) - h - 1.0).floor() as i32, (y0.max(y1) + h + 1.0).ceil() as i32);
+        for y in ya.max(0)..=yb.min(self.size as i32 - 1) {
+            for x in xa.max(0)..=xb.min(self.size as i32 - 1) {
+                let (px, py) = (x as f32 + 0.5 - x0, y as f32 + 0.5 - y0);
+                let t = ((px * vx + py * vy) / len2).clamp(0.0, 1.0);
+                let (qx, qy) = (px - t * vx, py - t * vy);
+                self.blend(x, y, rgb, cover((qx * qx + qy * qy).sqrt() - h));
+            }
+        }
     }
 
-    /// Blacks out everything outside the round face.
+    /// Blacks out everything outside the round face. Each row's fully
+    /// inside span is left alone and only its few edge pixels blended, from
+    /// a table made once.
     pub fn mask_round(&mut self) {
-        let c = self.size as f32 / 2.0;
-        for y in 0..self.size {
-            for x in 0..self.size {
-                let (dx, dy) = (x as f32 + 0.5 - c, y as f32 + 0.5 - c);
-                let a = cover((dx * dx + dy * dy).sqrt() - c);
-                let i = y * self.size + x;
-                self.pixels[i] = mix(0, self.pixels[i], a);
+        if self.mask.is_empty() {
+            self.mask = round_mask(self.size);
+        }
+        let n = self.size;
+        for (y, row) in self.mask.iter().enumerate() {
+            let line = &mut self.pixels[y * n..(y + 1) * n];
+            line[..row.from].fill(0);
+            line[row.to..].fill(0);
+            for &(x, a) in &row.edge {
+                line[x] = mix(0, line[x], a);
             }
         }
     }
@@ -332,17 +403,36 @@ impl Canvas {
     /// The face laid out on the gen 3's panel: `stride` bytes a row, the
     /// face in its first FACE rows, turned.
     pub fn to_panel(&self, format: &PixelFormat, stride: usize) -> Vec<u8> {
-        assert_eq!(self.size, FACE);
         let mut out = vec![0u8; stride * FACE];
-        for y in 0..FACE {
-            for x in 0..FACE {
-                let (u, v) = (y, FACE - 1 - x);
-                let px = format.pack(self.pixels[v * FACE + u]);
-                let at = y * stride + x * format.bytes;
-                out[at..at + format.bytes].copy_from_slice(&px.to_le_bytes()[..format.bytes]);
+        self.to_panel_into(format, stride, &mut out);
+        out
+    }
+
+    /// to_panel into `out` (at least stride * FACE bytes), which can be
+    /// kept from frame to frame. The turn is done in 16x16 tiles, so that
+    /// both the reads and the writes stay close together in memory.
+    pub fn to_panel_into(&self, format: &PixelFormat, stride: usize, out: &mut [u8]) {
+        assert_eq!(self.size, FACE);
+        assert!(out.len() >= stride * FACE);
+        const TILE: usize = 16;
+        let bytes = format.bytes;
+        let xrgb = bytes == 4
+            && (format.red.offset, format.green.offset, format.blue.offset) == (16, 8, 0)
+            && (format.red.length, format.green.length, format.blue.length) == (8, 8, 8);
+        for ty in (0..FACE).step_by(TILE) {
+            for tx in (0..FACE).step_by(TILE) {
+                for y in ty..(ty + TILE).min(FACE) {
+                    let row = y * stride;
+                    for x in tx..(tx + TILE).min(FACE) {
+                        // The panel's (x, y) shows the face's (u, v) = (y, 479 - x).
+                        let rgb = self.pixels[(FACE - 1 - x) * FACE + y];
+                        let px = if xrgb { rgb } else { format.pack(rgb) };
+                        let at = row + x * bytes;
+                        out[at..at + bytes].copy_from_slice(&px.to_le_bytes()[..bytes]);
+                    }
+                }
             }
         }
-        out
     }
 }
 
