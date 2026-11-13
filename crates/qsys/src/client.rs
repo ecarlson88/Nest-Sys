@@ -178,6 +178,11 @@ impl<S: Read + Write> Client<S> {
         Ok(())
     }
 
+    /// The connection itself (its addresses, say).
+    pub fn get_ref(&self) -> &S {
+        &self.stream
+    }
+
     /// Messages the Core sent unasked, oldest first.
     pub fn take_notifications(&mut self) -> Vec<Value> {
         self.notifications.drain(..).collect()
