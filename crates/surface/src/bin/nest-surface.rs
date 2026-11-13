@@ -90,12 +90,16 @@ mod unit {
         Ok(a)
     }
 
+    /// e, saying which path it came from.
+    fn at(path: &std::path::Path, e: std::io::Error) -> std::io::Error {
+        std::io::Error::new(e.kind(), format!("{}: {e}", path.display()))
+    }
+
     pub fn run(a: Args) -> std::io::Result<()> {
         let stop = stop_flag();
-        let at = |path: &PathBuf| move |e: std::io::Error| std::io::Error::new(e.kind(), format!("{}: {e}", path.display()));
-        let mut fb = Framebuffer::open(&a.fb).map_err(at(&a.fb))?;
+        let mut fb = Framebuffer::open(&a.fb).map_err(|e| at(&a.fb, e))?;
         let _console = Console::graphics();
-        let mut inputs = Inputs::open(&a.input).map_err(at(&a.input))?;
+        let mut inputs = Inputs::open(&a.input).map_err(|e| at(&a.input, e))?;
         println!("nest-surface: {:?} panel, Core {}:{}", fb.panel(), a.config.host, a.config.port);
         let mut runner = Runner::new(a.config);
         while !stop.load(Ordering::SeqCst) {
