@@ -125,8 +125,9 @@ Text is Inter (`crates/surface/fonts`, OFL) drawn with fontdue; shapes are
 anti-aliased.
 
 Ideas for later (from Erik): an idle/home screen (e.g. the time) to land on
-after a while without input; the Controls list and combo box choices
-falling away as they scroll (animation).
+after a while without input. The Controls list and combo box choices roll
+as a drum (render::Renderer keeps the drum's place between frames); on the
+unit, check the frame rate the CPU manages for full-face redraws.
 
 ## Suggested milestones
 

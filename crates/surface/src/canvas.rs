@@ -53,6 +53,10 @@ impl Fonts {
     fn glyph(&mut self, w: Weight, ch: char, size: f32) -> &(Metrics, Vec<u8>) {
         let key = (w, ch, size.to_bits());
         if !self.glyphs.contains_key(&key) {
+            // Animated sizes add up; start afresh now and then.
+            if self.glyphs.len() > 4000 {
+                self.glyphs.clear();
+            }
             let font = self.font(w);
             // A character Inter lacks draws as '?'.
             let ch = if font.has_glyph(ch) { ch } else { '?' };

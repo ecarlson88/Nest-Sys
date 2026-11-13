@@ -19,7 +19,7 @@ use qsys::{Client, Qrc, Transport, DEFAULT_PORT, PREFIX};
 use surface::app::{App, Set};
 use surface::canvas::{Canvas, FACE};
 use surface::input::{Button, Event};
-use surface::render::{render, status};
+use surface::render::{status, Renderer};
 
 const PAGE: &str = include_str!("sim.html");
 const POLL_EVERY: Duration = Duration::from_millis(200);
@@ -65,8 +65,8 @@ fn parse() -> Result<Args, String> {
 /// What the browser asked for.
 enum Request {
     Page,
-    Frame,
-    Version,
+    /// The latest frame, unless the browser already has version `have`.
+    Frame(Option<u64>),
     Input(String, i32),
     Other,
 }
@@ -90,8 +90,7 @@ fn read_request(stream: &mut TcpStream) -> Option<Request> {
     };
     Some(match route {
         "/" => Request::Page,
-        "/frame.png" => Request::Frame,
-        "/version" => Request::Version,
+        "/frame" => Request::Frame(param("have").and_then(|v| v.parse().ok())),
         "/input" => Request::Input(param("e").unwrap_or_default(), param("n").and_then(|n| n.parse().ok()).unwrap_or(0)),
         _ => Request::Other,
     })
@@ -104,6 +103,15 @@ fn respond(stream: &mut TcpStream, status: &str, kind: &str, body: &[u8]) {
     );
     let _ = stream.write_all(head.as_bytes());
     let _ = stream.write_all(body);
+}
+
+fn respond_frame(stream: &mut TcpStream, version: u64, png: &[u8]) {
+    let head = format!(
+        "HTTP/1.1 200 OK\r\nContent-Type: image/png\r\nContent-Length: {}\r\nX-Version: {version}\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n",
+        png.len()
+    );
+    let _ = stream.write_all(head.as_bytes());
+    let _ = stream.write_all(png);
 }
 
 fn now_ms(start: Instant) -> u64 {
@@ -177,6 +185,8 @@ fn run(a: Args) -> std::io::Result<()> {
     let start = Instant::now();
     let mut button = Button::default();
     let mut canvas = Canvas::new(FACE);
+    let mut renderer = Renderer::new();
+    let mut animating = false;
     let mut frame = Vec::new();
     let mut version = 0u64;
     let mut dirty = true;
@@ -194,8 +204,10 @@ fn run(a: Args) -> std::io::Result<()> {
             let _ = stream.set_nonblocking(false);
             match read_request(&mut stream) {
                 Some(Request::Page) => respond(&mut stream, "200 OK", "text/html; charset=utf-8", PAGE.as_bytes()),
-                Some(Request::Frame) => respond(&mut stream, "200 OK", "image/png", &frame),
-                Some(Request::Version) => respond(&mut stream, "200 OK", "text/plain", version.to_string().as_bytes()),
+                Some(Request::Frame(have)) if have == Some(version) => {
+                    respond(&mut stream, "204 No Content", "text/plain", b"")
+                }
+                Some(Request::Frame(_)) => respond_frame(&mut stream, version, &frame),
                 Some(Request::Input(e, n)) => {
                     let t = now_ms(start);
                     match e.as_str() {
@@ -260,10 +272,13 @@ fn run(a: Args) -> std::io::Result<()> {
             }
         }
 
-        if dirty {
+        if dirty || animating {
             match &session {
-                Some(s) => render(&s.app, &mut canvas),
-                None => status(&mut canvas, "Connecting…", &format!("{}:{} — {trouble}", a.host, a.port)),
+                Some(s) => animating = renderer.frame(&s.app, &mut canvas, now_ms(start)),
+                None => {
+                    animating = false;
+                    status(&mut canvas, "Connecting…", &format!("{}:{} — {trouble}", a.host, a.port));
+                }
             }
             frame = canvas.to_png();
             version += 1;

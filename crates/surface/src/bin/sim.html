@@ -19,8 +19,8 @@
 </style>
 </head>
 <body>
-<div id="ring" tabindex="0"><img id="face" alt="The Nest's screen" src="/frame.png" draggable="false"></div>
-<div>Ring: mouse wheel or <kbd>←</kbd> <kbd>→</kbd> &nbsp; Click: mouse button or <kbd>Space</kbd> &nbsp; Hold the click for the component list</div>
+<div id="ring" tabindex="0"><canvas id="face" width="480" height="480" aria-label="The Nest's screen"></canvas></div>
+<div>Ring: mouse wheel or <kbd>←</kbd> <kbd>→</kbd> &nbsp; Click: mouse button or <kbd>Space</kbd> &nbsp; Hold the click for the Controls list</div>
 <script>
 const ring = document.getElementById('ring');
 const face = document.getElementById('face');
@@ -43,13 +43,20 @@ window.addEventListener('keydown', ev => {
   else if (ev.key === ' ' && !ev.repeat) { press(); ev.preventDefault(); }
 });
 window.addEventListener('keyup', ev => { if (ev.key === ' ') release(); });
+// Frames as fast as they come: the server answers 204 until it has a
+// newer one than the version shown.
+const ctx = face.getContext('2d');
 let shown = -1;
 async function refresh() {
   try {
-    const v = +(await (await fetch('/version')).text());
-    if (v !== shown) { shown = v; face.src = '/frame.png?v=' + v; }
+    const r = await fetch('/frame?have=' + shown);
+    if (r.status === 200) {
+      shown = +r.headers.get('X-Version');
+      const bitmap = await createImageBitmap(await r.blob());
+      ctx.drawImage(bitmap, 0, 0);
+    }
   } catch (e) {}
-  setTimeout(refresh, 100);
+  setTimeout(refresh, 12);
 }
 refresh();
 ring.focus();

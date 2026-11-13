@@ -1,4 +1,9 @@
 //! Draws the app on the round face.
+//!
+//! Wheels (the Controls list, a combo box's choices) are drawn as a drum:
+//! when the choice moves, the rows roll to their new places, shrinking and
+//! fading as they turn away from the middle. A [`Renderer`] keeps where the
+//! drum has got to between frames; [`render`] draws one still frame.
 
 use qsys::{Control, Widget};
 use serde_json::Value;
@@ -40,16 +45,100 @@ fn shown(c: &Control) -> String {
     }
 }
 
+/// How quickly a drum settles: the time for it to cover 63% of the way.
+const DRUM_TAU_S: f32 = 0.075;
+/// Each row of a drum is this many degrees around it from the next.
+const DRUM_STEP_DEG: f32 = 25.0;
+/// The drum's radius: how far from the middle rows sit at a quarter turn.
+const DRUM_R: f32 = 190.0;
+
+/// Where a drum has rolled to, in rows (counting on past the last row
+/// rather than wrapping, so a wrap rolls the short way).
+struct Drum {
+    key: String,
+    n: usize,
+    index: usize,
+    target: f32,
+    pos: f32,
+}
+
+/// What a frame needs from the frames before it.
+struct Anim {
+    drum: Drum,
+    dt: f32,
+    moving: bool,
+}
+
+impl Anim {
+    /// The drum's position for wheel `key` of n rows, now on row `index`.
+    fn drum(&mut self, key: &str, n: usize, index: usize) -> f32 {
+        let d = &mut self.drum;
+        if d.key != key || d.n != n {
+            *d = Drum { key: key.to_owned(), n, index, target: index as f32, pos: index as f32 };
+        } else if index != d.index {
+            let n = n as i64;
+            let mut step = (index as i64 - d.index as i64).rem_euclid(n);
+            if step > n / 2 {
+                step -= n;
+            }
+            d.target += step as f32;
+            d.index = index;
+        }
+        d.pos += (d.target - d.pos) * (1.0 - (-self.dt / DRUM_TAU_S).exp());
+        if (d.target - d.pos).abs() < 0.002 {
+            d.pos = d.target;
+        } else {
+            self.moving = true;
+        }
+        d.pos
+    }
+}
+
+/// Draws frames that follow on from each other, for animation.
+pub struct Renderer {
+    anim: Anim,
+    last_ms: Option<u64>,
+}
+
+impl Default for Renderer {
+    fn default() -> Self {
+        Renderer::new()
+    }
+}
+
+impl Renderer {
+    pub fn new() -> Renderer {
+        let drum = Drum { key: String::new(), n: 0, index: 0, target: 0.0, pos: 0.0 };
+        Renderer { anim: Anim { drum, dt: 0.0, moving: false }, last_ms: None }
+    }
+
+    /// Draws the app as at now_ms; returns whether something is still
+    /// moving (so another frame is wanted soon).
+    pub fn frame(&mut self, app: &App, canvas: &mut Canvas, now_ms: u64) -> bool {
+        let dt = self.last_ms.map_or(0.0, |t| now_ms.saturating_sub(t) as f32 / 1000.0);
+        self.last_ms = Some(now_ms);
+        self.anim.dt = dt.min(0.1);
+        self.anim.moving = false;
+        draw(app, canvas, &mut self.anim);
+        self.anim.moving
+    }
+}
+
+/// One still frame, every drum at rest.
 pub fn render(app: &App, canvas: &mut Canvas) {
+    Renderer::new().frame(app, canvas, 0);
+}
+
+fn draw(app: &App, canvas: &mut Canvas, anim: &mut Anim) {
     canvas.clear(BG);
     match (app.current(), app.mode) {
         (None, _) => status(canvas, "No controls", "Give components a NEST_ Code Name and Script Access External"),
-        (Some(_), Mode::Menu { focus }) => menu(app, focus, canvas),
+        (Some(_), Mode::Menu { focus }) => menu(app, focus, canvas, anim),
         (Some(screen), _) if matches!(screen.layout, Layout::Volume { .. }) => volume(screen, canvas),
-        (Some(screen), mode) if matches!(screen.layout, Layout::Selector { .. }) => selector(screen, mode, canvas),
+        (Some(screen), mode) if matches!(screen.layout, Layout::Selector { .. }) => selector(screen, mode, canvas, anim),
         (Some(screen), mode) => {
             match app.focused() {
-                Some(item) => control(app, screen, item, mode, canvas),
+                Some(item) => control(app, screen, item, mode, canvas, anim),
                 None => controls_stop(screen, canvas),
             }
             // A picker's wheel of choices has the bottom to itself.
@@ -83,42 +172,50 @@ fn hint(canvas: &mut Canvas, y: f32, text: &str) {
 }
 
 /// The list of components, as a wheel of names around the one shown.
-fn menu(app: &App, focus: usize, canvas: &mut Canvas) {
+fn menu(app: &App, focus: usize, canvas: &mut Canvas, anim: &mut Anim) {
     canvas.text_centred(C, 58.0, "Controls", 20.0, Weight::Regular, 200.0, DIM);
     let shown = app.shown_screens();
-    let n = shown.len();
     let at = shown.iter().position(|&i| i == focus).unwrap_or(0);
-    canvas.line(90.0, 240.0, 390.0, 240.0, 78.0, TRACK);
-    canvas.text_centred(C, 240.0, &app.screens[focus].title, 40.0, Weight::Bold, 320.0, FG);
-    for (offset, i) in neighbours(n, at) {
-        let title = app.screens[shown[i]].title.clone();
-        wheel_row(canvas, offset, &title);
-    }
-    dots(at, n, canvas);
+    let titles: Vec<String> = shown.iter().map(|&i| app.screens[i].title.clone()).collect();
+    let pos = anim.drum("menu", titles.len(), at);
+    drum(canvas, &titles, pos, TRACK, FG);
+    dots(at, titles.len(), canvas);
 }
 
-/// The rows around the one at `at` of n in a wheel, as (offset, index):
-/// up to two each way, each index once, the nearest first.
-fn neighbours(n: usize, at: usize) -> Vec<(i32, usize)> {
-    let mut used = vec![at];
-    let mut rows = Vec::new();
-    for offset in [1i32, -1, 2, -2] {
-        if n == 0 {
-            break;
-        }
-        let i = (at as i64 + offset as i64).rem_euclid(n as i64) as usize;
-        if !used.contains(&i) {
-            used.push(i);
-            rows.push((offset, i));
-        }
+/// rows as a drum turned to `pos`: the row there in the middle on a pill
+/// of `pill`, in `rgb`; the others above and below, smaller and fainter the
+/// further they have turned away.
+fn drum(canvas: &mut Canvas, rows: &[String], pos: f32, pill: u32, rgb: u32) {
+    let n = rows.len() as i64;
+    if n == 0 {
+        return;
     }
-    rows
-}
-
-/// A row of a wheel: further from the middle is smaller and fainter.
-fn wheel_row(canvas: &mut Canvas, offset: i32, text: &str) {
-    let (dy, size, rgb) = if offset.abs() == 1 { (74.0, 28.0, DIM) } else { (134.0, 22.0, DIM2) };
-    canvas.text_centred(C, 240.0 + dy * offset.signum() as f32, text, size, Weight::Regular, 300.0, rgb);
+    canvas.line(90.0, 240.0, 390.0, 240.0, 78.0, pill);
+    // Each row once: a window of at most n rows around the middle.
+    let base = pos.round() as i64;
+    let (lo, hi) = if n >= 7 {
+        (base - 3, base + 3)
+    } else {
+        let lo = base - ((n - 1) / 2).min(2);
+        (lo, lo + n.min(5) - 1)
+    };
+    for k in lo..=hi {
+        let o = k as f32 - pos;
+        if o.abs() > 2.7 {
+            continue;
+        }
+        let theta = (o * DRUM_STEP_DEG).to_radians();
+        let (sin, cos) = theta.sin_cos();
+        let y = C + DRUM_R * sin;
+        // Smaller and fainter as it turns away; the middle row in rgb.
+        let size = (40.0 * (0.3 + 0.7 * cos.powi(3)) * 2.0).round() / 2.0;
+        let faded = mix(BG, DIM, cos * cos);
+        let colour = mix(faded, rgb, (1.0 - o.abs()).clamp(0.0, 1.0));
+        let half_chord = (C * C - (y - C) * (y - C)).max(0.0).sqrt();
+        let width = (2.0 * half_chord - 70.0).clamp(60.0, 320.0);
+        let text = &rows[k.rem_euclid(n) as usize];
+        canvas.text_centred(C, y, text, size, Weight::Bold, width, colour);
+    }
 }
 
 /// Where the focus is among n: dots, or "i / n" when they would not fit.
@@ -180,7 +277,7 @@ fn volume(screen: &Screen, canvas: &mut Canvas) {
     }
 }
 
-fn control(app: &App, screen: &Screen, item: &Item, mode: Mode, canvas: &mut Canvas) {
+fn control(app: &App, screen: &Screen, item: &Item, mode: Mode, canvas: &mut Canvas, anim: &mut Anim) {
     let c = &item.control;
     let editing = matches!(mode, Mode::Edit { .. });
     match &item.widget {
@@ -239,7 +336,11 @@ fn control(app: &App, screen: &Screen, item: &Item, mode: Mode, canvas: &mut Can
             hint(canvas, 392.0, if momentary { "On while held" } else { "Click to fire" });
         }
         Widget::Picker { choices } => match mode {
-            Mode::Edit { choice } if !choices.is_empty() => picker_wheel(canvas, &item.label, choices, choice),
+            Mode::Edit { choice } if !choices.is_empty() => {
+                let key = format!("pick:{}:{}", screen.component.name, c.name);
+                wheel(canvas, anim, &key, &item.label, choices, choice, EDIT);
+                canvas.text_centred(C, 430.0, "Click picks · hold cancels", 17.0, Weight::Regular, 260.0, DIM);
+            }
             _ => {
                 header(canvas, &screen.title, &item.label);
                 canvas.text_centred(C, 256.0, &shown(c), 44.0, Weight::Bold, 360.0, FG);
@@ -267,41 +368,33 @@ fn control(app: &App, screen: &Screen, item: &Item, mode: Mode, canvas: &mut Can
     }
 }
 
-/// A combo box being chosen from: the choices as a wheel around the one
-/// that a click would pick.
-fn picker_wheel(canvas: &mut Canvas, label: &str, choices: &[String], choice: usize) {
-    wheel(canvas, label, choices, choice, EDIT);
-    canvas.text_centred(C, 430.0, "Click picks · hold cancels", 17.0, Weight::Regular, 260.0, DIM);
-}
-
-/// choices as a wheel around `choice`, highlighted in rgb.
-fn wheel(canvas: &mut Canvas, label: &str, choices: &[String], choice: usize, rgb: u32) {
+/// A combo box's choices as a drum, rolled to `choice`, highlighted in rgb.
+#[allow(clippy::too_many_arguments)]
+fn wheel(canvas: &mut Canvas, anim: &mut Anim, key: &str, label: &str, choices: &[String], choice: usize, rgb: u32) {
     canvas.text_centred(C, 70.0, label, 22.0, Weight::Regular, 260.0, DIM);
-    canvas.line(90.0, 240.0, 390.0, 240.0, 78.0, mix(BG, rgb, 0.22));
-    canvas.text_centred(C, 240.0, &choices[choice], 40.0, Weight::Bold, 320.0, rgb);
-    for (offset, i) in neighbours(choices.len(), choice) {
-        wheel_row(canvas, offset, &choices[i]);
-    }
+    let pos = anim.drum(key, choices.len(), choice);
+    drum(canvas, choices, pos, mix(BG, rgb, 0.22), rgb);
 }
 
 /// A component whose one control is a combo box: its choices always on a
 /// wheel, the current one at rest, the one a click would pick while turning.
-fn selector(screen: &Screen, mode: Mode, canvas: &mut Canvas) {
+fn selector(screen: &Screen, mode: Mode, canvas: &mut Canvas, anim: &mut Anim) {
     let Layout::Selector { item } = screen.layout else { return };
     let c = &screen.items[item].control;
     let Widget::Picker { choices } = &screen.items[item].widget else { return };
     if choices.is_empty() {
         return;
     }
+    let key = format!("pick:{}:{}", screen.component.name, c.name);
     match mode {
         Mode::Edit { choice } => {
-            wheel(canvas, &screen.title, choices, choice.min(choices.len() - 1), EDIT);
+            wheel(canvas, anim, &key, &screen.title, choices, choice.min(choices.len() - 1), EDIT);
             canvas.text_centred(C, 430.0, "Click to select", 18.0, Weight::Regular, 260.0, DIM);
         }
         _ => {
             let current = choices.iter().position(|ch| Some(ch.as_str()) == c.string.as_deref());
             match current {
-                Some(at) => wheel(canvas, &screen.title, choices, at, ACCENT),
+                Some(at) => wheel(canvas, anim, &key, &screen.title, choices, at, ACCENT),
                 // A value not among the choices: shown on its own.
                 None => {
                     canvas.text_centred(C, 70.0, &screen.title, 22.0, Weight::Regular, 260.0, DIM);
