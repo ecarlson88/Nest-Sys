@@ -107,12 +107,21 @@ Then open http://127.0.0.1:8480.
 - **Hold** on a screen is a shortcut to the Controls list. There, the ring
   moves and a click opens a component.
 
+- **Home screen:** after a while without input (1 min by default) the
+  screen shows the time and date; the first turn or click only wakes it,
+  back where it was.
 - **Settings** ends the Controls list. Its rows: **Helper text** (click
-  switches the small "Click to ..." hints on or off), **Network** (the Core's
+  switches the small "Click to ..." hints on or off), **Home screen** (the
+  idle delay: 30 s, 1 min, 5 min or never), **Clock** (12- or 24-hour),
+  **Network** (the Core's
   address, this unit's IP, the design and the Core's state; click to go
   back) and **Back to Controls**. A hold also goes back. The simulator keeps
   settings in `surface-settings.json` (`--settings PATH` to move it).
   Screen timeout and brightness will join them once there is hardware.
+
+Controls are named by their Q-SYS Legend when the design gives one, else
+by their name made readable ("toggle.1" shows as "Toggle", "led.1" as
+"LED"; the number stays when a component has several).
 
 Controls the Core reports Invisible or Disabled are left off, and a
 component whose bypass is on disappears from the Nest until it goes off.

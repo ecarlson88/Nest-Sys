@@ -20,7 +20,8 @@ use std::time::{Duration, Instant};
 
 use qsys::{Client, Qrc, Transport, DEFAULT_PORT, PREFIX};
 use serde_json::Value;
-use surface::app::{App, Set, Settings};
+use chrono::{Datelike, Timelike};
+use surface::app::{App, Clock, Set, Settings};
 use surface::canvas::{Canvas, FACE};
 use surface::input::{Button, Event};
 use surface::render::{status, Renderer};
@@ -160,6 +161,16 @@ fn take_engine_status(s: &mut Session) -> bool {
         }
     }
     changed
+}
+
+/// The local time as the home screen shows it.
+fn clock_now() -> Clock {
+    let now = chrono::Local::now();
+    Clock {
+        hour: now.hour(),
+        minute: now.minute(),
+        date: format!("{} {} {}", now.format("%A"), now.day(), now.format("%B")),
+    }
 }
 
 fn load_settings(path: &str) -> Settings {
@@ -314,6 +325,11 @@ fn run(a: Args) -> std::io::Result<()> {
             }
             if noop {
                 last_noop = Instant::now();
+            }
+            let clock = clock_now();
+            if s.app.clock != clock {
+                s.app.clock = clock;
+                dirty |= s.app.idle;
             }
             match exchange(s, events, t, poll, noop) {
                 Ok(changed) => {

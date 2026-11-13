@@ -10,7 +10,7 @@ use serde_json::Value;
 
 use std::cell::Cell;
 
-use crate::app::{App, Item, Layout, Mode, Screen, SETTINGS, SETTINGS_ROWS};
+use crate::app::{App, Item, Layout, Mode, Screen, Settings, SettingsRow, SETTINGS, SETTINGS_ROWS};
 use crate::canvas::{mix, Canvas, Weight, FACE};
 
 const BG: u32 = 0x000000;
@@ -134,6 +134,11 @@ pub fn render(app: &App, canvas: &mut Canvas) {
 fn draw(app: &App, canvas: &mut Canvas, anim: &mut Anim) {
     HINTS.with(|h| h.set(app.settings.hints));
     canvas.clear(BG);
+    if app.idle {
+        home(app, canvas);
+        canvas.mask_round();
+        return;
+    }
     match (app.current(), app.mode) {
         (_, Mode::Menu { focus }) => menu(app, focus, canvas, anim),
         (_, Mode::Settings { focus }) => settings(app, focus, canvas, anim),
@@ -209,23 +214,48 @@ fn menu(app: &App, focus: usize, canvas: &mut Canvas, anim: &mut Anim) {
 /// The Settings list, as a drum of its rows.
 fn settings(app: &App, focus: usize, canvas: &mut Canvas, anim: &mut Anim) {
     canvas.text_centred(C, 58.0, "Settings", 20.0, Weight::Regular, 200.0, DIM);
-    let rows: Vec<String> = SETTINGS_ROWS
-        .iter()
-        .enumerate()
-        .map(|(i, r)| match i {
-            0 => format!("{r}: {}", if app.settings.hints { "On" } else { "Off" }),
-            _ => (*r).to_owned(),
-        })
-        .collect();
+    let rows: Vec<String> = SETTINGS_ROWS.iter().map(|r| settings_row(&app.settings, *r)).collect();
     let pos = anim.drum("settings", rows.len(), focus);
     drum(canvas, &rows, pos, TRACK, FG);
-    let what = match focus {
-        0 => "Click to switch",
-        1 => "Click to open",
-        _ => "Click to go back",
-    };
-    hint(canvas, 404.0, what);
     dots(focus, rows.len(), canvas);
+}
+
+fn settings_row(s: &Settings, row: SettingsRow) -> String {
+    match row {
+        SettingsRow::Hints => format!("Helper text: {}", if s.hints { "On" } else { "Off" }),
+        SettingsRow::Idle => format!(
+            "Home screen: {}",
+            match s.idle_s {
+                None => "Never".to_owned(),
+                Some(n) if n.is_multiple_of(60) => format!("{} min", n / 60),
+                Some(n) => format!("{n} s"),
+            }
+        ),
+        SettingsRow::Clock => format!("Clock: {}", if s.clock24 { "24-hour" } else { "12-hour" }),
+        SettingsRow::Network => "Network".into(),
+        SettingsRow::Back => "Back to Controls".into(),
+    }
+}
+
+/// The idle home screen: the time, large, and the date.
+fn home(app: &App, canvas: &mut Canvas) {
+    let c = &app.clock;
+    let (time, suffix) = if app.settings.clock24 {
+        (format!("{:02}:{:02}", c.hour, c.minute), "")
+    } else {
+        let h = if c.hour.is_multiple_of(12) { 12 } else { c.hour % 12 };
+        (format!("{h}:{:02}", c.minute), if c.hour < 12 { "AM" } else { "PM" })
+    };
+    let (big, small) = (124.0, 30.0);
+    let w_time = canvas.fonts.width(&time, big, Weight::Light);
+    let w_suffix = if suffix.is_empty() { 0.0 } else { 10.0 + canvas.fonts.width(suffix, small, Weight::Regular) };
+    let left = C - (w_time + w_suffix) / 2.0;
+    let baseline = 226.0 + big * 0.727 / 2.0;
+    canvas.text(left, baseline, &time, big, Weight::Light, FG);
+    if !suffix.is_empty() {
+        canvas.text(left + w_time + 10.0, baseline, suffix, small, Weight::Regular, DIM);
+    }
+    canvas.text_centred(C, 318.0, &c.date, 24.0, Weight::Regular, 340.0, DIM);
 }
 
 /// What the caller knows of the network, a label above each value.
@@ -277,6 +307,9 @@ fn drum(canvas: &mut Canvas, rows: &[String], pos: f32, pill: u32, rgb: u32) {
         let half_chord = (C * C - (y - C) * (y - C)).max(0.0).sqrt();
         let width = (2.0 * half_chord - 70.0).clamp(60.0, 320.0);
         let text = &rows[k.rem_euclid(n) as usize];
+        // A long row shrinks to fit (down to 70%) before it is cut short.
+        let natural = canvas.fonts.width(text, size, Weight::Bold);
+        let size = if natural > width { ((size * (width / natural).max(0.7)) * 2.0).floor() / 2.0 } else { size };
         canvas.text_centred(C, y, text, size, Weight::Bold, width, colour);
     }
 }

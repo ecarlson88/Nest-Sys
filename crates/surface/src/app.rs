@@ -25,8 +25,12 @@
 //! moves and a click opens one. A trigger flashes for FLASH_MS when fired.
 //!
 //! The list of components ends with **Settings**: a list of its own (the
-//! ring moves, a click acts) with the helper text switch, the Network page
-//! and a way back to the list; a hold there also goes back to the list.
+//! ring moves, a click acts) with the helper text switch, the idle delay,
+//! the clock's format, the Network page and a way back to the list; a hold
+//! there also goes back to the list.
+//!
+//! After the idle delay without input the screen goes **idle**, showing the
+//! time; the first input after that only wakes it, back where it was.
 //!
 //! Controls the Core reports Invisible or Disabled are not shown, and a
 //! component whose `bypass` is on is left out altogether, for as long as
@@ -50,7 +54,8 @@ pub const GAIN: &str = "gain";
 pub struct Item {
     pub control: Control,
     pub widget: Widget,
-    /// The design's Legend when it gives one, else the control's name.
+    /// The design's Legend when it gives one, else the control's name
+    /// made readable (pretty_name).
     pub label: String,
     pub invisible: bool,
     pub disabled: bool,
@@ -59,6 +64,11 @@ pub struct Item {
 impl Item {
     fn new(control: Control, widget: Widget) -> Item {
         Item { label: control.name.clone(), control, widget, invisible: false, disabled: false }
+    }
+
+    fn named(mut self, siblings: &[&str]) -> Item {
+        self.label = pretty_name(&self.control.name, siblings);
+        self
     }
 
     pub fn shown(&self) -> bool {
@@ -132,19 +142,37 @@ pub enum Mode {
 /// The Settings entry's place in Mode::Menu.
 pub const SETTINGS: usize = usize::MAX;
 
-/// The rows of the Settings list.
-pub const SETTINGS_ROWS: [&str; 3] = ["Helper text", "Network", "Back to Controls"];
+/// The rows of the Settings list, in order.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum SettingsRow {
+    Hints,
+    Idle,
+    Clock,
+    Network,
+    Back,
+}
+
+pub const SETTINGS_ROWS: [SettingsRow; 5] =
+    [SettingsRow::Hints, SettingsRow::Idle, SettingsRow::Clock, SettingsRow::Network, SettingsRow::Back];
+
+/// The idle delays a click on the Idle row steps through, in seconds; None
+/// is never.
+pub const IDLE_CHOICES: [Option<u64>; 4] = [Some(30), Some(60), Some(300), None];
 
 /// What the user chose in Settings, kept by the caller between runs.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Settings {
     /// Whether the small "Click to ..." hints are shown.
     pub hints: bool,
+    /// Seconds without input before the home screen; None for never.
+    pub idle_s: Option<u64>,
+    /// A 24-hour clock rather than 12-hour.
+    pub clock24: bool,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Settings { hints: true }
+        Settings { hints: true, idle_s: Some(60), clock24: false }
     }
 }
 
@@ -156,12 +184,70 @@ impl Settings {
         if let Some(h) = v.get("hints").and_then(Value::as_bool) {
             s.hints = h;
         }
+        match v.get("idle_s") {
+            Some(Value::Null) => s.idle_s = None,
+            Some(n) => s.idle_s = n.as_u64().filter(|&n| n > 0).or(s.idle_s),
+            None => {}
+        }
+        if let Some(c) = v.get("clock24").and_then(Value::as_bool) {
+            s.clock24 = c;
+        }
         s
     }
 
     pub fn to_json(&self) -> Value {
-        json!({"hints": self.hints})
+        json!({"hints": self.hints, "idle_s": self.idle_s, "clock24": self.clock24})
     }
+
+    /// The idle delay after this one, round IDLE_CHOICES.
+    fn next_idle(&self) -> Option<u64> {
+        let at = IDLE_CHOICES.iter().position(|&c| c == self.idle_s).unwrap_or(0);
+        IDLE_CHOICES[(at + 1) % IDLE_CHOICES.len()]
+    }
+}
+
+/// The time to show when idle, from the caller's clock.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Clock {
+    pub hour: u32,
+    pub minute: u32,
+    /// The date, written out ("Thursday 13 November").
+    pub date: String,
+}
+
+/// A control's name for the screen when the design gives no Legend:
+/// words split at dots and underscores, capitalised ("LED" for led), and
+/// an index dropped when no other control in the component shares the
+/// name before it ("toggle.1" is "Toggle", unless there is a "toggle.2").
+pub fn pretty_name(name: &str, siblings: &[&str]) -> String {
+    let base = match name.rsplit_once('.') {
+        Some((b, i)) if !i.is_empty() && i.bytes().all(|c| c.is_ascii_digit()) => Some((b, i)),
+        _ => None,
+    };
+    let (stem, index) = match base {
+        Some((b, i)) => {
+            let shared = siblings.iter().filter(|s| s.rsplit_once('.').is_some_and(|(sb, _)| sb == b)).count() > 1;
+            (b, shared.then_some(i))
+        }
+        None => (name, None),
+    };
+    let mut words: Vec<String> = stem
+        .split(['.', '_'])
+        .filter(|w| !w.is_empty())
+        .map(|w| match w.to_ascii_lowercase().as_str() {
+            "led" => "LED".to_owned(),
+            "text" if stem.contains("display") => String::new(),
+            _ => {
+                let mut c = w.chars();
+                c.next().map_or_else(String::new, |f| f.to_uppercase().chain(c).collect())
+            }
+        })
+        .filter(|w| !w.is_empty())
+        .collect();
+    if let Some(i) = index {
+        words.push(i.to_owned());
+    }
+    if words.is_empty() { name.to_owned() } else { words.join(" ") }
 }
 
 /// A value to send to the Core.
@@ -188,6 +274,13 @@ pub struct App {
     pub settings: Settings,
     /// What the Network page shows, as (label, value), from the caller.
     pub network: Vec<(String, String)>,
+    /// Showing the home screen after the idle delay.
+    pub idle: bool,
+    /// The time, kept current by the caller.
+    pub clock: Clock,
+    /// The click that woke the screen, still to be let go: its release and
+    /// click are not acted on.
+    waking: bool,
 }
 
 /// The title of a component's screen: its Code Name without the prefix,
@@ -278,6 +371,8 @@ fn screen_of(d: Discovered, prefix: &str) -> Option<Screen> {
     let mut gain = None;
     let mut mute = None;
     let mut items = Vec::new();
+    let names: Vec<String> = d.controls.iter().map(|c| c.name.clone()).collect();
+    let siblings: Vec<&str> = names.iter().map(String::as_str).collect();
     for control in d.controls.into_iter().filter(|c| !is_bypass(c)) {
         let (widget, _) = pick_for(&d.component, &control);
         if widget == Widget::Hidden {
@@ -288,7 +383,7 @@ fn screen_of(d: Discovered, prefix: &str) -> Option<Screen> {
             ("mute", Widget::Toggle) => mute = Some(items.len()),
             _ => {}
         }
-        items.push(Item::new(control, widget));
+        items.push(Item::new(control, widget).named(&siblings));
     }
     let layout = match (d.component.kind.as_deref(), gain) {
         (Some(GAIN), Some(gain)) => {
@@ -317,7 +412,8 @@ impl App {
     pub fn new(found: Vec<Discovered>, prefix: &str) -> App {
         let screens = found.into_iter().filter_map(|d| screen_of(d, prefix)).collect();
         let mut app = App { screens, screen: 0, focus: 0, mode: Mode::Browse, pressed: None, last_input_ms: 0, flash: None,
-            settings: Settings::default(), network: Vec::new() };
+            settings: Settings::default(), network: Vec::new(), idle: false, clock: Clock::default(),
+            waking: false };
         app.settle();
         app
     }
@@ -375,6 +471,14 @@ impl App {
     /// Time passing: ends editing after EDIT_TIMEOUT_MS without input.
     /// Returns whether anything changed on screen.
     pub fn tick(&mut self, now_ms: u64) -> bool {
+        let quiet = now_ms.saturating_sub(self.last_input_ms);
+        if !self.idle && self.pressed.is_none() && self.settings.idle_s.is_some_and(|s| quiet >= s * 1000) {
+            self.idle = true;
+            if matches!(self.mode, Mode::Edit { .. }) {
+                self.mode = Mode::Browse;
+            }
+            return true;
+        }
         if self.flash.as_ref().is_some_and(|f| now_ms >= f.2) {
             self.flash = None;
             return true;
@@ -427,6 +531,25 @@ impl App {
     /// An input at now_ms (the clock tick() is given).
     pub fn handle(&mut self, ev: Event, now_ms: u64) -> Vec<Set> {
         self.last_input_ms = now_ms;
+        // Idle, the first input only wakes the screen; a click that woke
+        // it is not acted on when let go.
+        if self.idle {
+            self.idle = false;
+            self.waking = ev == Event::Down;
+            return Vec::new();
+        }
+        if self.waking {
+            match ev {
+                Event::Up => return Vec::new(),
+                Event::Click | Event::Hold => {
+                    if ev == Event::Click {
+                        self.waking = false;
+                    }
+                    return Vec::new();
+                }
+                _ => self.waking = false,
+            }
+        }
         // A momentary button goes off when the click lets go, wherever the
         // screen has got to; while it is held, a hold means nothing.
         if let Some((component, control)) = self.pressed.clone() {
@@ -461,10 +584,12 @@ impl App {
             Mode::Settings { focus } => {
                 match ev {
                     Event::Turn(n) => self.mode = Mode::Settings { focus: wrap(focus, n, SETTINGS_ROWS.len()) },
-                    Event::Click => match focus {
-                        0 => self.settings.hints = !self.settings.hints,
-                        1 => self.mode = Mode::Network,
-                        _ => self.mode = Mode::Menu { focus: SETTINGS },
+                    Event::Click => match SETTINGS_ROWS[focus] {
+                        SettingsRow::Hints => self.settings.hints = !self.settings.hints,
+                        SettingsRow::Idle => self.settings.idle_s = self.settings.next_idle(),
+                        SettingsRow::Clock => self.settings.clock24 = !self.settings.clock24,
+                        SettingsRow::Network => self.mode = Mode::Network,
+                        SettingsRow::Back => self.mode = Mode::Menu { focus: SETTINGS },
                     },
                     Event::Hold => self.mode = Mode::Menu { focus: SETTINGS },
                     _ => {}
@@ -473,7 +598,8 @@ impl App {
             }
             Mode::Network => {
                 if matches!(ev, Event::Click | Event::Hold) {
-                    self.mode = Mode::Settings { focus: 1 };
+                    let row = SETTINGS_ROWS.iter().position(|&r| r == SettingsRow::Network).unwrap_or(0);
+                    self.mode = Mode::Settings { focus: row };
                 }
                 return Vec::new();
             }
