@@ -170,14 +170,14 @@ fn volume(screen: &Screen, canvas: &mut Canvas) {
     let (min, max) = c.range().unwrap_or((0.0, 1.0));
     edge(canvas, fraction(c, min, max), if muted { RED } else { ACCENT }, !muted);
     canvas.text_centred(C, 150.0, &screen.title, 34.0, Weight::Bold, 300.0, FG);
-    canvas.text_centred(C, 246.0, &shown(c), 84.0, Weight::Light, 320.0, if muted { DIM } else { FG });
+    let level = crate::app::percent(c).map_or_else(|| shown(c), |p| format!("{p}%"));
+    canvas.text_centred(C, 246.0, &level, 96.0, Weight::Light, 320.0, if muted { DIM } else { FG });
     if muted {
         canvas.text_centred(C, 326.0, "Muted", 30.0, Weight::Bold, 200.0, RED);
         hint(canvas, 368.0, "Turn to unmute");
     } else if mute.is_some_and(|m| screen.items[m].shown()) {
         hint(canvas, 340.0, "Click to mute");
     }
-    range_labels(canvas, c, min, max);
 }
 
 fn control(app: &App, screen: &Screen, item: &Item, mode: Mode, canvas: &mut Canvas) {

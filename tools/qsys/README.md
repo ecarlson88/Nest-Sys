@@ -87,7 +87,7 @@ Then open http://127.0.0.1:8480.
 | hold the click (0.7 s) | hold the mouse button or Space |
 
 - **A Gain component** is a volume knob: the ring sets the level as it
-  turns, a click mutes or unmutes, a hold opens the **Controls** list.
+  turns, shown as 0-100% of the gain's range, 1% a detent, a click mutes or unmutes, a hold opens the **Controls** list.
   While muted (red), the first turn unmutes without changing the level.
   Its bypass and invert are not shown.
 - **A component whose only control is a combo box** (e.g. a Text
