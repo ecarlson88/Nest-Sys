@@ -10,7 +10,8 @@
 //! - holding the click also opens the list (except on a momentary button).
 //!
 //! While editing, the ring changes the value (a dial's is sent as it turns;
-//! a picker's when the click picks it) and a click or hold closes it. A
+//! a picker's when the click picks it) and a click or hold closes it, as
+//! does EDIT_TIMEOUT_MS without input (a picker's choice is then dropped). A
 //! momentary button is on while the click is down; holding it does not open
 //! the list, and its release is always sent. The list of components: the
 //! ring moves, a click opens one, a hold goes back.
@@ -19,6 +20,10 @@ use qsys::{pick_for, Change, Component, Control, Discovered, Kind, Widget};
 use serde_json::{json, Value};
 
 use crate::input::Event;
+
+/// Editing ends after this long without a turn or a click, so the next
+/// person to turn the ring does not change a value unawares.
+pub const EDIT_TIMEOUT_MS: u64 = 5000;
 
 pub struct Item {
     pub control: Control,
@@ -57,6 +62,8 @@ pub struct App {
     pub mode: Mode,
     /// The momentary button the click holds on: (component, control).
     pub pressed: Option<(String, String)>,
+    /// When the last input came, in the caller's milliseconds.
+    pub last_input_ms: u64,
 }
 
 /// The title of a component's screen: its Code Name without the prefix,
@@ -118,7 +125,7 @@ impl App {
                 (!items.is_empty()).then_some(Screen { component: d.component, title, items })
             })
             .collect();
-        App { screens, screen: 0, focus: 0, mode: Mode::Browse, pressed: None }
+        App { screens, screen: 0, focus: 0, mode: Mode::Browse, pressed: None, last_input_ms: 0 }
     }
 
     pub fn current(&self) -> Option<&Screen> {
@@ -144,7 +151,19 @@ impl App {
             .collect()
     }
 
-    pub fn handle(&mut self, ev: Event) -> Vec<Set> {
+    /// Time passing: ends editing after EDIT_TIMEOUT_MS without input.
+    /// Returns whether anything changed on screen.
+    pub fn tick(&mut self, now_ms: u64) -> bool {
+        if matches!(self.mode, Mode::Edit { .. }) && now_ms.saturating_sub(self.last_input_ms) >= EDIT_TIMEOUT_MS {
+            self.mode = Mode::Browse;
+            return true;
+        }
+        false
+    }
+
+    /// An input at now_ms (the clock tick() is given).
+    pub fn handle(&mut self, ev: Event, now_ms: u64) -> Vec<Set> {
+        self.last_input_ms = now_ms;
         if self.screens.is_empty() {
             return Vec::new();
         }

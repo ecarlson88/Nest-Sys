@@ -41,7 +41,8 @@ fn design() -> App {
 }
 
 fn run(app: &mut App, events: &[Event]) -> Vec<Set> {
-    events.iter().flat_map(|e| app.handle(*e)).collect()
+    let now = app.last_input_ms;
+    events.iter().flat_map(|e| app.handle(*e, now)).collect()
 }
 
 fn set(component: &str, control: &str, value: Value) -> Set {
@@ -246,4 +247,32 @@ fn a_dial_snaps_an_odd_value_onto_its_steps() {
     let gain = json!({"Component": "NEST_Zone1", "Name": "gain", "String": "-59.4dB", "Value": -59.36000061});
     app.apply(&Change::from_json(&gain).unwrap());
     assert_eq!(run(&mut app, &[Turn(-1)]), [set("NEST_Zone1", "gain", json!(-60.0))]);
+}
+
+#[test]
+fn editing_ends_after_five_seconds_without_input() {
+    let mut app = design();
+    open(&mut app, "Zone1");
+    run(&mut app, &[Turn(1)]);
+    app.handle(Click, 1_000);
+    assert!(matches!(app.mode, Mode::Edit { .. }));
+    assert!(!app.tick(5_999), "turns and clicks keep it open");
+    app.handle(Turn(1), 5_000);
+    assert!(!app.tick(9_999));
+    assert!(app.tick(10_000));
+    assert_eq!(app.mode, Mode::Browse);
+    // Turning now moves to the next control instead of changing the gain.
+    assert!(app.handle(Turn(1), 10_500).is_empty());
+    assert_eq!(focused(&app), "invert");
+    assert!(!app.tick(60_000), "browsing does not time out");
+}
+
+#[test]
+fn a_timed_out_picker_sends_nothing() {
+    let mut app = design();
+    open(&mut app, "Combo");
+    app.handle(Click, 0);
+    app.handle(Turn(1), 100);
+    assert!(app.tick(5_100));
+    assert_eq!(app.focused().unwrap().control.string.as_deref(), Some("Streaming"));
 }

@@ -93,7 +93,8 @@ Then open http://127.0.0.1:8480.
   is down (holding it keeps it on rather than opening the list).
 - **Editing:** the ring changes a dial's value as it turns (sent live). For a
   combo box it moves through the choices; a click picks one, a hold cancels.
-  A click closes a dial.
+  A click closes a dial. Editing also ends after 5 s without a turn or click
+  (a combo box's choice is then dropped).
 - **Hold** on a screen is a shortcut to the list of components. There, the ring moves,
   a click opens a component, and a hold goes back.
 

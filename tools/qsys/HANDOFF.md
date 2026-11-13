@@ -119,6 +119,9 @@ runs it against a Core in a browser (`tools/qsys/README.md`). Still to do
 for the unit: a framebuffer and evdev backend in place of the browser, and
 reconnecting when the Core goes away.
 
+Ideas for later (from Erik): an idle/home screen (e.g. the time) to land on
+after a while without input.
+
 ## Suggested milestones
 
 1. Real-Core run of `qrc_discover.py --raw`; settle the field names and widget rules.
