@@ -3,8 +3,9 @@
 //!
 //! One component per screen, of two layouts:
 //!
-//! - **Volume**, for a gain component: the ring sets the gain as it turns
-//!   (while muted, it first unmutes), a click toggles its mute, and a hold
+//! - **Volume**, for a gain component: the ring sets the gain as it turns,
+//!   one percent of its range a detent, shown as 0-100% (while muted, it
+//!   first unmutes), a click toggles its mute, and a hold
 //!   opens the list of components. Its bypass and invert are not shown.
 //! - **Selector**, for a component whose one control is a combo box: the
 //!   ring scrolls its choices at once, a click sends the one shown, and
@@ -195,6 +196,25 @@ fn turn_number(c: &mut Control, n: i32) -> Value {
     }
     // Clean off float noise from the rounding (0.30000000000000004).
     let v = json!((v * 1e6).round() / 1e6);
+    c.value = v.clone();
+    c.string = None;
+    v
+}
+
+/// A gain's level as a whole percentage of its range (what Q-SYS calls
+/// its Position, which for a gain runs evenly in dB).
+pub fn percent(c: &Control) -> Option<i64> {
+    let (lo, hi) = c.range()?;
+    let v = c.value.as_f64()?;
+    Some((((v - lo) / (hi - lo)) * 100.0).round().clamp(0.0, 100.0) as i64)
+}
+
+/// Turns a gain n percent of its range, on whole percents; returns the
+/// value to send.
+fn turn_percent(c: &mut Control, n: i32) -> Value {
+    let Some((lo, hi)) = c.range() else { return turn_number(c, n) };
+    let pct = (percent(c).unwrap_or(0) + n as i64).clamp(0, 100);
+    let v = json!(((lo + (hi - lo) * pct as f64 / 100.0) * 1e6).round() / 1e6);
     c.value = v.clone();
     c.string = None;
     v
@@ -405,7 +425,7 @@ impl App {
             }
             Event::Turn(n) => {
                 let c = &mut screen.items[gain].control;
-                let value = turn_number(c, n);
+                let value = turn_percent(c, n);
                 vec![Set { component, control: c.name.clone(), value }]
             }
             Event::Click => {

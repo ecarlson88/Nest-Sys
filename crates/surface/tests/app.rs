@@ -148,10 +148,15 @@ fn indicators_do_nothing_when_clicked() {
 fn a_gain_turns_with_the_ring_and_mutes_with_a_click() {
     let mut app = design();
     open(&mut app, "Zone1");
-    // 0 dB in the fixture, a 120 dB range: steps of 1 dB, sent at once.
-    assert_eq!(run(&mut app, &[Turn(-1)]), [set("NEST_Zone1", "gain", json!(-1.0))]);
+    // 0 dB in the fixture of -100..20 dB is 83%; a detent is 1% (1.2 dB),
+    // sent at once.
+    let gain = |app: &App| surface::app::percent(&app.current().unwrap().items[0].control);
+    assert_eq!(gain(&app), Some(83));
+    assert_eq!(run(&mut app, &[Turn(-1)]), [set("NEST_Zone1", "gain", json!(-1.6))]);
+    assert_eq!(gain(&app), Some(82));
     assert_eq!(run(&mut app, &[Turn(3)]), [set("NEST_Zone1", "gain", json!(2.0))]);
     assert_eq!(run(&mut app, &[Turn(500)]), [set("NEST_Zone1", "gain", json!(20.0))]);
+    assert_eq!(gain(&app), Some(100));
     assert_eq!(run(&mut app, &[Down, Up, Click]), [set("NEST_Zone1", "mute", json!(true))]);
     assert!(app.current().unwrap().muted());
     assert_eq!(run(&mut app, &[Down, Up, Click]), [set("NEST_Zone1", "mute", json!(false))]);
@@ -159,7 +164,7 @@ fn a_gain_turns_with_the_ring_and_mutes_with_a_click() {
     run(&mut app, &[Down, Up, Click]);
     assert_eq!(run(&mut app, &[Turn(-1)]), [set("NEST_Zone1", "mute", json!(false))]);
     assert!(!app.current().unwrap().muted());
-    assert_eq!(run(&mut app, &[Turn(-1)]), [set("NEST_Zone1", "gain", json!(19.0))]);
+    assert_eq!(run(&mut app, &[Turn(-1)]), [set("NEST_Zone1", "gain", json!(18.8))]);
     assert_eq!(app.mode, Mode::Browse, "no editing on a volume screen");
     run(&mut app, &[Down, Hold, Up]);
     assert_eq!(app.mode, Mode::Menu { focus: 1 });
@@ -310,12 +315,14 @@ fn renders_every_control_in_every_mode() {
 }
 
 #[test]
-fn a_gain_snaps_an_odd_value_onto_its_steps() {
+fn a_gain_snaps_an_odd_value_onto_whole_percents() {
     let mut app = design();
     open(&mut app, "Zone1");
+    // -59.36 dB is 33.9%, shown 34%; a detent down is 33%, -60.4 dB.
     let gain = json!({"Component": "NEST_Zone1", "Name": "gain", "String": "-59.4dB", "Value": -59.36000061});
     app.apply(&Change::from_json(&gain).unwrap());
-    assert_eq!(run(&mut app, &[Turn(-1)]), [set("NEST_Zone1", "gain", json!(-60.0))]);
+    assert_eq!(surface::app::percent(&app.current().unwrap().items[0].control), Some(34));
+    assert_eq!(run(&mut app, &[Turn(-1)]), [set("NEST_Zone1", "gain", json!(-60.4))]);
 }
 
 #[test]
