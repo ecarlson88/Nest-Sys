@@ -1,0 +1,7 @@
+#
+#    nest-surface: restart the Q-SYS control surface if it ever exits.
+#
+
+check process nest-surface with pidfile /var/run/nest-surface.pid
+  start program = "/etc/init.d/nest-surface start"
+  stop  program = "/etc/init.d/nest-surface stop"

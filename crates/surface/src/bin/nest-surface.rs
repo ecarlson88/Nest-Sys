@@ -92,9 +92,10 @@ mod unit {
 
     pub fn run(a: Args) -> std::io::Result<()> {
         let stop = stop_flag();
-        let mut fb = Framebuffer::open(&a.fb)?;
+        let at = |path: &PathBuf| move |e: std::io::Error| std::io::Error::new(e.kind(), format!("{}: {e}", path.display()));
+        let mut fb = Framebuffer::open(&a.fb).map_err(at(&a.fb))?;
         let _console = Console::graphics();
-        let mut inputs = Inputs::open(&a.input)?;
+        let mut inputs = Inputs::open(&a.input).map_err(at(&a.input))?;
         println!("nest-surface: {:?} panel, Core {}:{}", fb.panel(), a.config.host, a.config.port);
         let mut runner = Runner::new(a.config);
         while !stop.load(Ordering::SeqCst) {

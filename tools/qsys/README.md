@@ -133,3 +133,49 @@ discovers the design again, so changes made meanwhile show up.
 The first build downloads and compiles dependencies and takes a few
 minutes. Options: `--port`, `--user`/`--password`, `--prefix`,
 `--listen ADDR` (e.g. `0.0.0.0:8480` to open it from a phone on the LAN).
+
+## On the unit (not yet tried on hardware)
+
+`nest-surface` is the same screen on the unit's own display and ring:
+`/dev/fb0` and `/dev/input`, as the Doom port drives them. It needs a
+rooted Gen 3 with SSH (unfr0zen's `--ssh`).
+
+1. Build it (Linux or macOS with the tools in `BUILDING.md`: zig and
+   cargo-zigbuild):
+
+   ```sh
+   sh crates/surface/build-unit.sh      # -> build/nest-surface-armv7
+   ```
+
+2. Copy it to the unit with the Core's address. Nothing on the unit's root
+   file system is changed; everything goes in `/media/data/nest-surface`:
+
+   ```sh
+   sh crates/surface/install-unit.sh UNIT_ADDRESS CORE_ADDRESS
+   ```
+
+3. Try it from an SSH session: `sh /media/data/nest-surface/nest-surface.sh`.
+   It takes the screen through nlclient's hand-over when nlclient is patched
+   for it (nlclient keeps running, showing nothing), else stops nlclient and
+   starts it again afterwards. Ctrl-C (or SIGTERM) stops it and puts the
+   display back. Its log is `/tmp/nest-surface.log`.
+
+`/media/data/nest-surface/config.json` holds the Core's address:
+`{"core": "192.168.1.20", "port": 1710, "user": "...", "password": "...",
+"prefix": "NEST_"}` (only `core` is needed). Settings chosen on the screen
+are kept beside it in `settings.json`.
+
+To keep it running and start it at boot, on a unit whose root file system
+can be written (untested):
+
+```sh
+cp /media/data/nest-surface/nest-surface.init /etc/init.d/nest-surface
+cp /media/data/nest-surface/nest-surface.monitrc /etc/monit.d/
+echo 'include /etc/monit.d/nest-surface.monitrc' >> /etc/monitrc
+monit reload
+```
+
+First things to check on a unit: that the face is upright and round on the
+panel, that the ring turns the right way (clockwise moves forward), how fast
+it draws (`cargo run --release -p surface --example bench` gives the
+desktop's numbers to compare), and whether the unit suspends while it runs.
