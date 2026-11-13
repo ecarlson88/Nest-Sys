@@ -8,7 +8,9 @@
 use qsys::{Control, Widget};
 use serde_json::Value;
 
-use crate::app::{App, Item, Layout, Mode, Screen};
+use std::cell::Cell;
+
+use crate::app::{App, Item, Layout, Mode, Screen, SETTINGS, SETTINGS_ROWS};
 use crate::canvas::{mix, Canvas, Weight, FACE};
 
 const BG: u32 = 0x000000;
@@ -130,10 +132,16 @@ pub fn render(app: &App, canvas: &mut Canvas) {
 }
 
 fn draw(app: &App, canvas: &mut Canvas, anim: &mut Anim) {
+    HINTS.with(|h| h.set(app.settings.hints));
     canvas.clear(BG);
     match (app.current(), app.mode) {
-        (None, _) => status(canvas, "No controls", "Give components a NEST_ Code Name and Script Access External"),
-        (Some(_), Mode::Menu { focus }) => menu(app, focus, canvas, anim),
+        (_, Mode::Menu { focus }) => menu(app, focus, canvas, anim),
+        (_, Mode::Settings { focus }) => settings(app, focus, canvas, anim),
+        (_, Mode::Network) => network(app, canvas),
+        (None, _) => {
+            status(canvas, "No controls", "Give components a NEST_ Code Name and Script Access External");
+            hint(canvas, 360.0, "Hold for Settings");
+        }
         (Some(screen), _) if matches!(screen.layout, Layout::Volume { .. }) => volume(screen, canvas),
         (Some(screen), mode) if matches!(screen.layout, Layout::Selector { .. }) => selector(screen, mode, canvas, anim),
         (Some(screen), mode) => {
@@ -167,19 +175,74 @@ fn header(canvas: &mut Canvas, title: &str, label: &str) {
     canvas.text_centred(C, 128.0, label, 38.0, Weight::Bold, 360.0, FG);
 }
 
+thread_local! {
+    /// Whether this frame shows hints: the app's Settings, set as each frame
+    /// starts, so every drawing function need not carry them.
+    static HINTS: Cell<bool> = const { Cell::new(true) };
+}
+
+/// A small "Click to ..." hint, unless Settings turned them off.
 fn hint(canvas: &mut Canvas, y: f32, text: &str) {
-    canvas.text_centred(C, y, text, 19.0, Weight::Regular, 300.0, DIM);
+    hint_sized(canvas, y, text, 19.0);
+}
+
+fn hint_sized(canvas: &mut Canvas, y: f32, text: &str, size: f32) {
+    if HINTS.with(Cell::get) {
+        canvas.text_centred(C, y, text, size, Weight::Regular, 300.0, DIM);
+    }
 }
 
 /// The list of components, as a wheel of names around the one shown.
 fn menu(app: &App, focus: usize, canvas: &mut Canvas, anim: &mut Anim) {
     canvas.text_centred(C, 58.0, "Controls", 20.0, Weight::Regular, 200.0, DIM);
-    let shown = app.shown_screens();
-    let at = shown.iter().position(|&i| i == focus).unwrap_or(0);
-    let titles: Vec<String> = shown.iter().map(|&i| app.screens[i].title.clone()).collect();
+    let entries = app.menu_entries();
+    let at = entries.iter().position(|&i| i == focus).unwrap_or(0);
+    let titles: Vec<String> = entries
+        .iter()
+        .map(|&i| if i == SETTINGS { "Settings".to_owned() } else { app.screens[i].title.clone() })
+        .collect();
     let pos = anim.drum("menu", titles.len(), at);
     drum(canvas, &titles, pos, TRACK, FG);
     dots(at, titles.len(), canvas);
+}
+
+/// The Settings list, as a drum of its rows.
+fn settings(app: &App, focus: usize, canvas: &mut Canvas, anim: &mut Anim) {
+    canvas.text_centred(C, 58.0, "Settings", 20.0, Weight::Regular, 200.0, DIM);
+    let rows: Vec<String> = SETTINGS_ROWS
+        .iter()
+        .enumerate()
+        .map(|(i, r)| match i {
+            0 => format!("{r}: {}", if app.settings.hints { "On" } else { "Off" }),
+            _ => (*r).to_owned(),
+        })
+        .collect();
+    let pos = anim.drum("settings", rows.len(), focus);
+    drum(canvas, &rows, pos, TRACK, FG);
+    let what = match focus {
+        0 => "Click to switch",
+        1 => "Click to open",
+        _ => "Click to go back",
+    };
+    hint(canvas, 404.0, what);
+    dots(focus, rows.len(), canvas);
+}
+
+/// What the caller knows of the network, a label above each value.
+fn network(app: &App, canvas: &mut Canvas) {
+    canvas.text_centred(C, 70.0, "Network", 30.0, Weight::Bold, 300.0, FG);
+    let rows = &app.network;
+    if rows.is_empty() {
+        canvas.text_centred(C, 240.0, "Nothing known yet", 24.0, Weight::Regular, 320.0, DIM);
+    }
+    let n = rows.len().min(5) as f32;
+    let top = 240.0 - 31.0 * (n - 1.0);
+    for (i, (label, value)) in rows.iter().take(5).enumerate() {
+        let y = top + 62.0 * i as f32;
+        canvas.text_centred(C, y - 12.0, label, 16.0, Weight::Regular, 300.0, DIM);
+        canvas.text_centred(C, y + 12.0, value, 24.0, Weight::Bold, 340.0, FG);
+    }
+    hint(canvas, 430.0, "Click to go back");
 }
 
 /// rows as a drum turned to `pos`: the row there in the middle on a pill
@@ -339,7 +402,7 @@ fn control(app: &App, screen: &Screen, item: &Item, mode: Mode, canvas: &mut Can
             Mode::Edit { choice } if !choices.is_empty() => {
                 let key = format!("pick:{}:{}", screen.component.name, c.name);
                 wheel(canvas, anim, &key, &item.label, choices, choice, EDIT);
-                canvas.text_centred(C, 430.0, "Click picks · hold cancels", 17.0, Weight::Regular, 260.0, DIM);
+                hint_sized(canvas, 430.0, "Click picks · hold cancels", 17.0);
             }
             _ => {
                 header(canvas, &screen.title, &item.label);
@@ -389,7 +452,7 @@ fn selector(screen: &Screen, mode: Mode, canvas: &mut Canvas, anim: &mut Anim) {
     match mode {
         Mode::Edit { choice } => {
             wheel(canvas, anim, &key, &screen.title, choices, choice.min(choices.len() - 1), EDIT);
-            canvas.text_centred(C, 430.0, "Click to select", 18.0, Weight::Regular, 260.0, DIM);
+            hint_sized(canvas, 430.0, "Click to select", 18.0);
         }
         _ => {
             let current = choices.iter().position(|ch| Some(ch.as_str()) == c.string.as_deref());
@@ -401,7 +464,7 @@ fn selector(screen: &Screen, mode: Mode, canvas: &mut Canvas, anim: &mut Anim) {
                     canvas.text_centred(C, 240.0, &shown(c), 40.0, Weight::Bold, 360.0, FG);
                 }
             }
-            canvas.text_centred(C, 430.0, "Turn to choose", 18.0, Weight::Regular, 260.0, DIM);
+            hint_sized(canvas, 430.0, "Turn to choose", 18.0);
         }
     }
 }

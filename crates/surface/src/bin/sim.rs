@@ -4,6 +4,9 @@
 //!
 //!     cargo run -p surface --bin sim -- CORE_HOST [--port 1710]
 //!         [--user U --password P] [--prefix NEST_] [--listen 127.0.0.1:8480]
+//!         [--settings surface-settings.json]
+//!
+//! Settings chosen on the screen are kept in the --settings file.
 //!
 //! then open http://127.0.0.1:8480. When the Core goes away (Designer
 //! leaving emulation, say), it shows "Connecting…" and tries again every
@@ -16,7 +19,8 @@ use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
 use qsys::{Client, Qrc, Transport, DEFAULT_PORT, PREFIX};
-use surface::app::{App, Set};
+use serde_json::Value;
+use surface::app::{App, Set, Settings};
 use surface::canvas::{Canvas, FACE};
 use surface::input::{Button, Event};
 use surface::render::{status, Renderer};
@@ -32,6 +36,7 @@ struct Args {
     password: String,
     prefix: String,
     listen: String,
+    settings: String,
 }
 
 fn parse() -> Result<Args, String> {
@@ -42,6 +47,7 @@ fn parse() -> Result<Args, String> {
         password: String::new(),
         prefix: PREFIX.into(),
         listen: "127.0.0.1:8480".into(),
+        settings: "surface-settings.json".into(),
     };
     let mut it = std::env::args().skip(1);
     while let Some(arg) = it.next() {
@@ -52,6 +58,7 @@ fn parse() -> Result<Args, String> {
             "--password" => a.password = value()?,
             "--prefix" => a.prefix = value()?,
             "--listen" => a.listen = value()?,
+            "--settings" => a.settings = value()?,
             s if s.starts_with('-') => return Err(format!("unknown option {s}")),
             s => a.host = s.into(),
         }
@@ -122,6 +129,51 @@ fn now_ms(start: Instant) -> u64 {
 struct Session {
     q: Qrc<TcpStream>,
     app: App,
+    /// The Core's last EngineStatus params (design name, state, ...).
+    engine: Value,
+}
+
+/// What the Network page shows.
+fn network_rows(a: &Args, s: &Session) -> Vec<(String, String)> {
+    let mut rows = vec![("Core".to_owned(), format!("{}:{}", a.host, a.port))];
+    if let Ok(local) = s.q.client.get_ref().local_addr() {
+        rows.push(("This unit".into(), local.ip().to_string()));
+    }
+    if let Some(design) = s.engine.get("DesignName").and_then(Value::as_str) {
+        let emulated = s.engine.get("IsEmulator").and_then(Value::as_bool) == Some(true);
+        rows.push(("Design".into(), if emulated { format!("{design} (emulated)") } else { design.to_owned() }));
+    }
+    if let Some(state) = s.engine.get("State").and_then(Value::as_str) {
+        rows.push(("Core state".into(), state.to_owned()));
+    }
+    rows
+}
+
+/// Takes the Core's unasked messages, keeping its EngineStatus; returns
+/// whether that changed.
+fn take_engine_status(s: &mut Session) -> bool {
+    let mut changed = false;
+    for m in s.q.client.take_notifications() {
+        if m.get("method").and_then(Value::as_str) == Some("EngineStatus") {
+            s.engine = m.get("params").cloned().unwrap_or(Value::Null);
+            changed = true;
+        }
+    }
+    changed
+}
+
+fn load_settings(path: &str) -> Settings {
+    std::fs::read(path)
+        .ok()
+        .and_then(|b| serde_json::from_slice::<Value>(&b).ok())
+        .map_or_else(Settings::default, |v| Settings::from_json(&v))
+}
+
+fn save_settings(path: &str, settings: &Settings) {
+    let text = serde_json::to_string_pretty(&settings.to_json()).unwrap_or_default();
+    if let Err(e) = std::fs::write(path, text + "\n") {
+        eprintln!("{path}: {e}");
+    }
 }
 
 /// Connects, discovers the design and follows its controls.
@@ -135,7 +187,10 @@ fn connect(a: &Args) -> qsys::Result<Session> {
         let names: Vec<&str> = controls.iter().map(String::as_str).collect();
         q.subscribe(&component, &names)?;
     }
-    Ok(Session { q, app })
+    let mut s = Session { q, app, engine: Value::Null };
+    take_engine_status(&mut s);
+    s.app.network = network_rows(a, &s);
+    Ok(s)
 }
 
 /// Whether an error means the connection is gone (rather than the Core
@@ -172,7 +227,6 @@ fn exchange(s: &mut Session, events: Vec<Event>, t: u64, poll: bool, noop: bool)
     if noop {
         s.q.client.noop()?;
     }
-    s.q.client.take_notifications();
     Ok(dirty)
 }
 
@@ -186,6 +240,7 @@ fn run(a: Args) -> std::io::Result<()> {
     let mut button = Button::default();
     let mut canvas = Canvas::new(FACE);
     let mut renderer = Renderer::new();
+    let mut saved = load_settings(&a.settings);
     let mut animating = false;
     let mut frame = Vec::new();
     let mut version = 0u64;
@@ -228,6 +283,7 @@ fn run(a: Args) -> std::io::Result<()> {
             match connect(&a) {
                 Ok(mut s) => {
                     println!("connected to {}:{}: {} screens", a.host, a.port, s.app.screens.len());
+                    s.app.settings = saved.clone();
                     if let Some(name) = &last_screen {
                         if let Some(i) = s.app.screens.iter().position(|sc| &sc.component.name == name) {
                             s.app.screen = i;
@@ -260,7 +316,17 @@ fn run(a: Args) -> std::io::Result<()> {
                 last_noop = Instant::now();
             }
             match exchange(s, events, t, poll, noop) {
-                Ok(changed) => dirty |= changed,
+                Ok(changed) => {
+                    dirty |= changed;
+                    if take_engine_status(s) {
+                        s.app.network = network_rows(&a, s);
+                        dirty = true;
+                    }
+                    if s.app.settings != saved {
+                        saved = s.app.settings.clone();
+                        save_settings(&a.settings, &saved);
+                    }
+                }
                 Err(e) => {
                     eprintln!("lost the Core: {e}; reconnecting");
                     last_screen = s.app.current().map(|sc| sc.component.name.clone());

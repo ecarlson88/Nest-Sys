@@ -124,6 +124,10 @@ for the unit: a framebuffer and evdev backend in place of the browser.
 Text is Inter (`crates/surface/fonts`, OFL) drawn with fontdue; shapes are
 anti-aliased.
 
+Settings (the Controls list's last entry): helper text on/off and a
+Network page; to add on hardware: screen timeout, brightness, and Wi-Fi
+details (SSID, signal) on the Network page.
+
 Ideas for later (from Erik): an idle/home screen (e.g. the time) to land on
 after a while without input. The Controls list and combo box choices roll
 as a drum (render::Renderer keeps the drum's place between frames); on the
