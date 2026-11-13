@@ -53,7 +53,9 @@ impl From<io::Error> for Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-/// One control's report in a ChangeGroup.Poll.
+/// One control's state from Component.Get or a ChangeGroup.Poll. Unlike
+/// GetControls these carry no Type: a Boolean's Value is 0.0/1.0 and a Text
+/// control's Value is a meaningless 0.0 (its text is String).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Change {
     /// The component, for a component control; None for a Named Control.
@@ -61,16 +63,35 @@ pub struct Change {
     pub name: String,
     pub value: Value,
     pub string: Option<String>,
+    /// A combo box's options; None or empty for other controls.
+    pub choices: Option<Vec<String>>,
+    /// The label a design gave the control, when not empty.
+    pub legend: Option<String>,
+    pub disabled: bool,
+    pub invisible: bool,
 }
 
 impl Change {
-    fn from_json(v: &Value) -> Option<Change> {
+    pub fn from_json(v: &Value) -> Option<Change> {
+        let flag = |key| v.get(key).and_then(Value::as_bool).unwrap_or(false);
         Some(Change {
             component: v.get("Component").and_then(Value::as_str).map(str::to_owned),
             name: v.get("Name")?.as_str()?.to_owned(),
             value: v.get("Value").cloned().unwrap_or(Value::Null),
             string: v.get("String").and_then(Value::as_str).map(str::to_owned),
+            choices: v
+                .get("Choices")
+                .and_then(Value::as_array)
+                .map(|a| a.iter().filter_map(Value::as_str).map(str::to_owned).collect()),
+            legend: v.get("Legend").and_then(Value::as_str).filter(|s| !s.is_empty()).map(str::to_owned),
+            disabled: flag("Disabled"),
+            invisible: flag("Invisible"),
         })
+    }
+
+    /// The value as on or off (see control::truthy).
+    pub fn is_on(&self) -> bool {
+        crate::control::truthy(&self.value)
     }
 }
 

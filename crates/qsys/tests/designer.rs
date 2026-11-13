@@ -1,7 +1,7 @@
 //! What Designer 2026's emulation returned for a test design
 //! (tests/data/designer), read as the screen reads it.
 
-use qsys::{has_prefix, pick, pick_for, Component, Control, Direction, Kind, Widget, PREFIX};
+use qsys::{has_prefix, pick, pick_for, Change, Component, Control, Direction, Kind, Widget, PREFIX};
 use serde_json::{json, Value};
 
 fn controls(fixture: &str) -> Vec<Control> {
@@ -86,4 +86,36 @@ fn shows_only_a_text_controllers_own_controls() {
     // A combo box: Designer reports no Choices, so it is plain text entry.
     assert_eq!(shown, [("Control", Widget::TextEntry)]);
     assert_eq!(find(&list, "Control").value, json!("Streaming"));
+}
+
+fn changes(fixture: &str) -> Vec<Change> {
+    let v: Value = serde_json::from_str(fixture).unwrap();
+    v.as_array().unwrap().iter().map(|c| Change::from_json(c).unwrap()).collect()
+}
+
+#[test]
+fn reads_polls_as_designer_sends_them() {
+    let first = changes(include_str!("data/designer/poll_first.json"));
+    assert_eq!(first.len(), 12);
+    let get = |name: &str| first.iter().find(|c| c.name == name).unwrap();
+    // Booleans arrive as numbers, text as String with a 0.0 Value.
+    assert_eq!(get("mute").value, json!(0.0));
+    assert!(!get("mute").is_on());
+    assert_eq!(get("text.1").string.as_deref(), Some("sfhd9ufg"));
+    assert_eq!(get("led.1").choices.as_deref(), Some(&[][..]));
+    assert_eq!(get("gain").choices, None);
+    assert_eq!(get("Control").choices.as_ref().unwrap().len(), 4);
+    assert_eq!(get("Control").legend, None);
+
+    let combo = changes(include_str!("data/designer/poll_combo.json"));
+    assert_eq!(combo[0].component.as_deref(), Some("Nest_Combo"));
+    assert_eq!(combo[0].string.as_deref(), Some("Mic 2"));
+}
+
+#[test]
+fn gets_a_combo_boxs_choices() {
+    let v: Value = serde_json::from_str(include_str!("data/designer/get_Nest_Combo_Control.json")).unwrap();
+    let c = Change::from_json(&v["Controls"][0]).unwrap();
+    assert_eq!(c.choices.unwrap(), ["Mic 1", "Mic 2", "Laptop", "Streaming"]);
+    assert_eq!(c.string.as_deref(), Some("Mic 1"));
 }

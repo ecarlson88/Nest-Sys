@@ -26,6 +26,9 @@ STATE = {
     ('NEST_Panel', 'toggle.1'): False,
     ('NEST_Panel', 'trigger.1'): 0.0,
 }
+STATE[("Nest_Combo", "Control")] = "Mic 1"
+# Only Component.Get and polls report a combo box's choices.
+CHOICES = {("Nest_Combo", "Control"): ["Mic 1", "Mic 2", "Laptop", "Streaming"]}
 LOCK = threading.Lock()
 POLLS = {"n": 0}
 
@@ -132,6 +135,9 @@ CONTROLS = {
             "Direction": "Read/Write"
         }
     ],
+    "Nest_Combo": [
+        {"Name": "Control", "Type": "Text", "String": "Mic 1", "Direction": "Read/Write"},
+    ],
     "Other_ Gain": [
         {
             "Name": "bypass",
@@ -220,9 +226,13 @@ class Handler(socketserver.BaseRequestHandler):
         elif m == "Component.Get":
             name = p["Name"]
             with LOCK:
-                res = {"Name": name, "Controls": [
-                    {"Name": c["Name"], "Value": STATE.get((name, c["Name"]))}
-                    for c in p["Controls"]]}
+                res = {"Name": name, "Controls": []}
+                for c in p["Controls"]:
+                    entry = {"Name": c["Name"], "Value": STATE.get((name, c["Name"]))}
+                    if (name, c["Name"]) in CHOICES:
+                        entry.update(Value=0.0, String=STATE[(name, c["Name"])],
+                                     Choices=CHOICES[(name, c["Name"])])
+                    res["Controls"].append(entry)
         elif m == "Component.Set":
             name = p["Name"]
             with LOCK:

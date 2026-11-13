@@ -26,6 +26,8 @@ struct State {
     controls: BTreeMap<Key, Value>,
     components: Vec<Value>,
     groups: BTreeMap<String, Group>,
+    /// Combo boxes' options, which only Get and Poll report.
+    choices: BTreeMap<Key, Value>,
     password: Option<String>,
 }
 
@@ -49,6 +51,10 @@ impl MockCore {
             for c in list["Controls"].as_array().unwrap() {
                 s.controls.insert((name.into(), c["Name"].as_str().unwrap().into()), c.clone());
             }
+        }
+        let get: Value = serde_json::from_str(include_str!("../data/designer/get_Nest_Combo_Control.json")).unwrap();
+        for c in get["Controls"].as_array().unwrap() {
+            s.choices.insert(("Nest_Combo".into(), c["Name"].as_str().unwrap().into()), c["Choices"].clone());
         }
         let state = Arc::new(Mutex::new(s));
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
@@ -91,6 +97,22 @@ fn set_value(s: &mut State, component: &str, control: &str, value: Value) -> Res
         }
     }
     Ok(())
+}
+
+/// A control's state as Get and Poll report it: no Type, a Boolean's Value
+/// as 0.0/1.0, a Text control's as 0.0, and Choices for a combo box.
+fn state(s: &State, key: &Key) -> Value {
+    let c = &s.controls[key];
+    let value = match (c["Type"].as_str(), &c["Value"]) {
+        (Some("Boolean"), Value::Bool(b)) => json!(if *b { 1.0 } else { 0.0 }),
+        (Some("Text"), _) => json!(0.0),
+        (_, v) => v.clone(),
+    };
+    let mut out = json!({"Component": key.0, "Name": key.1, "String": c["String"], "Value": value});
+    if let Some(choices) = s.choices.get(key) {
+        out["Choices"] = choices.clone();
+    }
+    out
 }
 
 fn send(conn: &mut TcpStream, msg: Value) {
@@ -157,8 +179,12 @@ fn dispatch(s: &mut State, msg: &Value, logged_on: &mut bool) -> Result<Value, (
             let mut out = Vec::new();
             for c in p["Controls"].as_array().ok_or((-32602, "bad params"))? {
                 let key = (name.clone(), c["Name"].as_str().unwrap_or("").to_owned());
-                let v = s.controls.get(&key).ok_or((8, "unknown control"))?;
-                out.push(json!({"Name": key.1, "Value": v["Value"], "String": v["String"]}));
+                if !s.controls.contains_key(&key) {
+                    return Err((8, "unknown control"));
+                }
+                let mut v = state(s, &key);
+                v.as_object_mut().unwrap().remove("Component");
+                out.push(v);
             }
             Ok(json!({"Name": name, "Controls": out}))
         }
@@ -186,13 +212,7 @@ fn dispatch(s: &mut State, msg: &Value, logged_on: &mut bool) -> Result<Value, (
         "ChangeGroup.Poll" => {
             let id = p["Id"].as_str().unwrap_or("").to_owned();
             let dirty = s.groups.get_mut(&id).map(|g| std::mem::take(&mut g.dirty)).unwrap_or_default();
-            let changes: Vec<Value> = dirty
-                .into_iter()
-                .map(|key| {
-                    let v = &s.controls[&key];
-                    json!({"Component": key.0, "Name": key.1, "Value": v["Value"], "String": v["String"]})
-                })
-                .collect();
+            let changes: Vec<Value> = dirty.iter().map(|key| state(s, key)).collect();
             Ok(json!({"Id": id, "Changes": changes}))
         }
         _ => Err((-32601, "Method not found")),

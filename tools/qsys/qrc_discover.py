@@ -232,6 +232,15 @@ def main():
         for name in keep:
             res = q.call("Component.GetControls", {"Name": name}) or {}
             ctrls = res.get("Controls", [])
+            # GetControls leaves out combo boxes' Choices; Component.Get has them.
+            text = [c["Name"] for c in ctrls if str(c.get("Type", "")).lower() == "text"]
+            if text:
+                got = q.call("Component.Get", {"Name": name,
+                                               "Controls": [{"Name": n} for n in text]}) or {}
+                choices = {g.get("Name"): g.get("Choices") for g in got.get("Controls", [])}
+                for c in ctrls:
+                    if choices.get(c["Name"]):
+                        c["Choices"] = choices[c["Name"]]
             discovered[name] = ctrls
             if args.raw:
                 print("--- GetControls raw: %s ---" % name)
@@ -241,6 +250,8 @@ def main():
                   + fmt("max", 8) + fmt("dir", 11) + fmt("widget", 20) + "notes")
             for c in ctrls:
                 w, note = pick_widget(c, types.get(name, ""))
+                if c.get("Choices"):
+                    note = "; ".join(filter(None, [note, "choices: " + ", ".join(c["Choices"])]))
                 print(fmt(c.get("Name"), 26) + fmt(c.get("Type"), 9) + fmt(c.get("String", c.get("Value")), 12)
                       + fmt(c.get("ValueMin"), 8) + fmt(c.get("ValueMax"), 8)
                       + fmt(c.get("Direction"), 11) + fmt(w, 20) + note)

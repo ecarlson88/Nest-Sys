@@ -5,7 +5,7 @@ mod mock;
 use std::time::Duration;
 
 use mock::MockCore;
-use qsys::{pick, Client, Error, Qrc, Transport, Widget, PREFIX};
+use qsys::{pick, pick_for, Client, Error, Qrc, Transport, Widget, PREFIX};
 use serde_json::json;
 
 fn connect(core: &MockCore) -> Qrc<std::net::TcpStream> {
@@ -23,6 +23,21 @@ fn discovers_only_prefixed_components() {
     assert_eq!(found[1].component.kind.as_deref(), Some("gain"));
     let gain = found[1].controls.iter().find(|c| c.name == "gain").unwrap();
     assert_eq!(pick(gain).0, Widget::Dial { min: -100.0, max: 20.0 });
+}
+
+#[test]
+fn fills_in_combo_box_choices_left_out_of_get_controls() {
+    let core = MockCore::start();
+    let mut q = connect(&core);
+    let found = q.list(PREFIX).unwrap();
+    let combo = found.iter().find(|d| d.component.name == "Nest_Combo").unwrap();
+    let control = combo.controls.iter().find(|c| c.name == "Control").unwrap();
+    let choices: Vec<String> = ["Mic 1", "Mic 2", "Laptop", "Streaming"].map(String::from).to_vec();
+    assert_eq!(pick_for(&combo.component, control).0, Widget::Picker { choices });
+    // Text controls without choices stay text entry.
+    let panel = &found[0];
+    let text = panel.controls.iter().find(|c| c.name == "text.1").unwrap();
+    assert_eq!(pick_for(&panel.component, text).0, Widget::TextEntry);
 }
 
 #[test]
@@ -46,7 +61,7 @@ fn sets_and_reads_back_a_control() {
     q.set("NEST_Panel", "text.1", json!("Hello")).unwrap();
     assert_eq!(q.get("NEST_Panel", "text.1").unwrap().string.as_deref(), Some("Hello"));
     let mute = q.get("NEST_Zone1", "mute").unwrap();
-    assert_eq!(mute.value, json!(true));
+    assert!(mute.is_on());
     assert_eq!(mute.component.as_deref(), Some("NEST_Zone1"));
 }
 
@@ -83,6 +98,10 @@ fn polls_current_values_then_only_changes() {
     assert_eq!(changes[0].component.as_deref(), Some("NEST_Zone1"));
     assert_eq!(changes[0].name, "gain");
     assert_eq!(changes[0].value, json!(-6.0));
+    core.change("NEST_Zone1", "mute", json!(true));
+    let changes = q.poll().unwrap();
+    assert_eq!(changes[0].value, json!(1.0)); // as Designer sends a Boolean
+    assert!(changes[0].is_on());
     assert!(q.poll().unwrap().is_empty());
 }
 
