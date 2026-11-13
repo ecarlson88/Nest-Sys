@@ -408,6 +408,18 @@ impl Canvas {
         out
     }
 
+    /// The face upright on a square panel its size: `stride` bytes a row.
+    pub fn to_upright_into(&self, format: &PixelFormat, stride: usize, out: &mut [u8]) {
+        assert!(out.len() >= stride * self.size);
+        let bytes = format.bytes;
+        for (y, row) in self.pixels.chunks_exact(self.size).enumerate() {
+            for (x, &rgb) in row.iter().enumerate() {
+                let at = y * stride + x * bytes;
+                out[at..at + bytes].copy_from_slice(&format.pack(rgb).to_le_bytes()[..bytes]);
+            }
+        }
+    }
+
     /// to_panel into `out` (at least stride * FACE bytes), which can be
     /// kept from frame to frame. The turn is done in 16x16 tiles, so that
     /// both the reads and the writes stay close together in memory.
@@ -487,6 +499,11 @@ mod tests {
         // (u, v) = (0, 0) is the panel's (479, 0).
         let at = 479 * 4;
         assert_eq!(&panel[at..at + 4], &[0, 0, 0xff, 0]);
+        let mut upright = vec![0u8; FACE * 4];
+        let mut small = Canvas::new(1);
+        small.pixels[0] = 0x00ff00;
+        small.to_upright_into(&PixelFormat::XRGB8888, 4, &mut upright);
+        assert_eq!(&upright[..4], &[0, 0xff, 0, 0]);
         let rgb565 = c.to_panel(&PixelFormat::RGB565, FACE * 2);
         assert_eq!(&rgb565[479 * 2..479 * 2 + 2], &0xf800u16.to_le_bytes());
     }
