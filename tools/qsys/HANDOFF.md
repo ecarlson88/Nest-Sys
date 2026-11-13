@@ -133,6 +133,102 @@ unit, dim the backlight there too. The Controls list and combo box choices roll
 as a drum (render::Renderer keeps the drum's place between frames); on the
 unit, check the frame rate the CPU manages for full-face redraws.
 
+## How nlclient works (from this repository; not yet seen on hardware)
+
+nlclient (`/nestlabs/sbin/nlclient`) is Nest's own program on the unit: the
+thermostat UI, the regulation of the heating through the backplate, the
+client of Nest's cloud and the owner of much of the unit's housekeeping.
+What the code and docs here say about it:
+
+- **Cloud client.** It talks to Nest's service for everything, keeping its
+  state in the cloud's "buckets" (device, shared, structure, schedule...). It
+  holds a long-poll subscribe open almost all the time (`hold`, 290 s).
+  unfr0zen points its `cloudregisterurl` at nestlocal, which serves those
+  endpoints on the unit itself (`crates/nestlocal/src/cloud.rs`,
+  `liveness.rs`). "nlclient keeps the truth; the server keeps a copy."
+- **Clock.** It sets the unit's clock from the cloud's
+  `X-nl-service-timestamp`. A unit with no ntpd boots in 2000 and nothing else
+  sets it, so nestlocal sets it by NTP or from Home Assistant
+  (`crates/nestlocal/src/clock.rs`). **For us:** without nestlocal or the
+  cloud, the home screen's time would be wrong unless the surface (or the
+  system) sets the clock by NTP.
+- **Sleep.** The unit suspends whenever nothing holds it awake: `nlsleepd`
+  ("nlscpm" on D-Bus, `com.nestlabs.scpm.sleepd`). Asleep, it wakes only for
+  packets the Wi-Fi chip was told to watch, which nlclient's own "sniffer"
+  programs for its cloud connection. A program can be a sleep entity
+  (`RegisterEntity`; nlsleepd calls `RequestSleep` before each sleep and
+  `WakeUp` after) and decline sleep, as nestlocal does while it needs to
+  (`crates/nestlocal/src/wake.rs`). **For us:** the surface's QRC connection
+  will not wake a sleeping unit; it likely has to be a sleep entity that
+  declines sleep while the screen is on (or keep the unit awake for good on
+  mains power).
+- **Display and activity.** nlclient lights and dims the display by user
+  activity; "stock user-activity notifications keep the display and device
+  awake" (`platform/common/nlclient/README.md`).
+- **Screen hand-over** (patched nlclient only, same README): while the pid in
+  `/var/run/unfr0zen/screen.owner` is alive, nlclient keeps running (and
+  regulating) but shows nothing. Gen 3 from 6.x draws with **EGL** (kind 1:
+  its `eglSwapBuffers` is skipped); the 2019 gen 3 and the gen 2 draw
+  straight into fb0 (kind 2: its mapping is swapped for private memory).
+  Meanwhile a thread in nlclient "lights the display every 2 s", since the
+  owner grabs the ring and button and nlclient would otherwise see no
+  activity. **nlclient writes `keeper.pid` only at its first bucket commit
+  or a click on the UNFR0ZEN screen**; until then a launcher stops nlclient
+  instead of handing over. **For us:** at boot, the launcher may find no
+  `keeper.pid` yet and fall back to stopping nlclient.
+- **Starting programs.** nlclient cannot start a program; the UNFR0ZEN
+  screen (code injected into nlclient, `platform/common/nlclient/src`)
+  writes a request file in `/var/run/unfr0zen` (`doom.request`) and
+  nestlocal launches it (`crates/nestlocal/src/doom.rs`). A "Q-SYS" entry
+  there could start the surface the same way.
+- **Startup order.** nestlocal starts before nlclient: nlclient opens the BLE
+  chip's UART and reads its settings file as it starts, and nestlocal must
+  have its stand-ins in place first (`crates/nestlocal/rootfs/nestlocal.init`,
+  `sensor/port.rs`, `structure.rs`).
+- **Patching is reversible.** The patched nlclient keeps the original at
+  `/etc/unfr0zen/nlclient.original` and an undo journal
+  (`/etc/unfr0zen/nlclient.undo.gz`).
+- **Bench use.** unfr0zen's `--backplate-sim` gives a "1H1C with a simulated
+  temperature, for testing off the wall" (`docs/integrations/index.html`):
+  probably what a unit on the bench, without heating wiring, needs.
+- **Not covered here:** how Wi-Fi is configured and kept up (nlclient's
+  setup screens, presumably), and whether anything watchdogs nlclient or
+  the unit. Find out on hardware (`ps`, `/etc/init.d`, `/etc/monit*`).
+
+## Hardware decision: keep the stock stack, or go "nuclear"
+
+Once the surface runs on a unit, judge the stock route (unfr0zen + the OEM
+nlclient + our app beside it) by these:
+
+**Signs the stock stack is fine** (then: an upstream PR to unfr0zen for a
+generic "run this app instead of the thermostat UI" option, and a repo of
+our own holding only the Q-SYS Rust app):
+- the hand-over is clean: no flicker, nlclient never takes the screen back;
+- the unit stays awake and on Wi-Fi while the surface runs, without fights;
+- it comes back by itself after a reboot or a Wi-Fi drop;
+- frames draw comfortably fast with nlclient running behind.
+
+**Signs to go nuclear:**
+- fighting `nlsleepd` to stay awake;
+- display glitches, or nlclient grabbing the screen back;
+- nlclient's CPU or memory use making the animation stutter;
+- a slow or fragile start that waits on the stock software.
+
+**Nuclear** means replacing the stock userland with a minimal system: our app
+plus only what brings up Wi-Fi, keeps the time, and drives the display and
+ring, perhaps with our own kernel and root file system. unfr0zen's recovery
+and flashing still matter (that part is worth tracking upstream); less of
+what it installs does. More work (Wi-Fi, power, any watchdog become ours),
+but a lean, fast-booting device that is wholly ours.
+
+Either way the Q-SYS app changes little: its front end (`device.rs`) is
+separate from everything else (`runner.rs`), which is why it should end up
+in a repository of its own whichever route wins. Repository options talked
+through (2026-11-13), none acted on: keep this whole fork; a fork with the
+unwanted parts deleted (constant conflicts; avoid); or two repositories, an
+almost-stock unfr0zen fork plus a separate Q-SYS app repository (preferred,
+after hardware).
+
 ## Suggested milestones
 
 1. Real-Core run of `qrc_discover.py --raw`; settle the field names and widget rules.
