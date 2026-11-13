@@ -377,6 +377,25 @@ fn control(app: &App, screen: &Screen, item: &Item, mode: Mode, canvas: &mut Can
     let c = &item.control;
     let editing = matches!(mode, Mode::Edit { .. });
     match &item.widget {
+        // A level: a dial with a Mute folded in, shown as a gain is.
+        Widget::Dial { min, max } if item.mute.is_some() => {
+            let muted = screen.level_muted(app.focus);
+            let rgb = if muted { RED } else if editing { EDIT } else { ACCENT };
+            edge(canvas, fraction(c, *min, *max), rgb, !muted);
+            canvas.text_centred(C, 108.0, &screen.title, 20.0, Weight::Regular, 220.0, DIM);
+            canvas.text_centred(C, 150.0, &item.label, 32.0, Weight::Bold, 300.0, FG);
+            let level = crate::app::percent(c).map_or_else(|| shown(c), |p| format!("{p}%"));
+            canvas.text_centred(C, 246.0, &level, 96.0, Weight::Light, 320.0, if muted { DIM } else { FG });
+            if muted {
+                canvas.text_centred(C, 326.0, "Muted", 30.0, Weight::Bold, 200.0, RED);
+            }
+            let what = match (editing, muted) {
+                (false, _) => "Click to adjust",
+                (true, true) => "Turn to unmute · hold when done",
+                (true, false) => "Turn for level · click to mute",
+            };
+            hint(canvas, if muted { 368.0 } else { 340.0 }, what);
+        }
         Widget::Dial { min, max } | Widget::Meter { min, max } => {
             let meter = matches!(item.widget, Widget::Meter { .. });
             let rgb = if meter { FG } else if editing { EDIT } else { ACCENT };

@@ -11,7 +11,11 @@
 //!   ring scrolls its choices at once, a click sends the one shown, and
 //!   EDIT_TIMEOUT_MS without input goes back to the current one; a hold
 //!   opens the list of components.
-//! - **Controls**, for any other: the ring moves between its controls and,
+//! - **Controls**, for any other. A toggle named "Mute" beside a dial (the
+//!   one named "Level" if there are several) folds into it: the dial shows
+//!   as a level in percent, red when muted, and once a click has opened it
+//!   the ring sets the level (first unmuting), a click toggles the mute, and
+//!   a hold or EDIT_TIMEOUT_MS closes it. Otherwise: the ring moves between its controls and,
 //!   after the last, a "Components" stop (wrapping); a click acts on the
 //!   control (a toggle flips, a button fires, a dial, number or picker opens
 //!   for editing) or, on the stop, opens the list of components; a hold also
@@ -59,11 +63,15 @@ pub struct Item {
     pub label: String,
     pub invisible: bool,
     pub disabled: bool,
+    /// For a dial: the item index of the Mute folded into it.
+    pub mute: Option<usize>,
+    /// A Mute folded into a dial: followed, but not a stop of its own.
+    pub folded: bool,
 }
 
 impl Item {
     fn new(control: Control, widget: Widget) -> Item {
-        Item { label: control.name.clone(), control, widget, invisible: false, disabled: false }
+        Item { label: control.name.clone(), control, widget, invisible: false, disabled: false, mute: None, folded: false }
     }
 
     fn named(mut self, siblings: &[&str]) -> Item {
@@ -101,8 +109,13 @@ impl Screen {
             && match self.layout {
                 Layout::Volume { gain, .. } => self.items[gain].shown(),
                 Layout::Selector { item } => self.items[item].shown(),
-                Layout::Controls => self.items.iter().any(Item::shown),
+                Layout::Controls => self.items.iter().any(|i| i.shown() && !i.folded),
             }
+    }
+
+    /// Whether the dial at `item` has a Mute folded in, and it is on.
+    pub fn level_muted(&self, item: usize) -> bool {
+        self.items.get(item).and_then(|i| i.mute).is_some_and(|m| self.items[m].control.is_on())
     }
 
     /// Where the ring stops on a Controls screen: each shown control's
@@ -112,7 +125,8 @@ impl Screen {
         if let Layout::Selector { item } = self.layout {
             return vec![item];
         }
-        let mut stops: Vec<usize> = (0..self.items.len()).filter(|&i| self.items[i].shown()).collect();
+        let mut stops: Vec<usize> =
+            (0..self.items.len()).filter(|&i| self.items[i].shown() && !self.items[i].folded).collect();
         stops.push(self.items.len());
         stops
     }
@@ -403,9 +417,24 @@ fn screen_of(d: Discovered, prefix: &str) -> Option<Screen> {
             Layout::Volume { gain: g, mute: m }
         }
         _ if items.len() == 1 && matches!(items[0].widget, Widget::Picker { .. }) => Layout::Selector { item: 0 },
-        _ => Layout::Controls,
+        _ => {
+            fold_mute(&mut items);
+            Layout::Controls
+        }
     };
     (!items.is_empty()).then_some(Screen { component: d.component, title, items, layout, has_bypass, bypassed })
+}
+
+/// Folds a toggle named "Mute" into a dial beside it: the one named
+/// "Level" if there is one, else the first.
+fn fold_mute(items: &mut [Item]) {
+    let named = |i: &Item, n: &str| i.control.name.eq_ignore_ascii_case(n);
+    let Some(m) = items.iter().position(|i| named(i, "mute") && i.widget == Widget::Toggle) else { return };
+    let dials: Vec<usize> =
+        (0..items.len()).filter(|&i| matches!(items[i].widget, Widget::Dial { .. })).collect();
+    let Some(&d) = dials.iter().find(|&&i| named(&items[i], "level")).or(dials.first()) else { return };
+    items[d].mute = Some(m);
+    items[m].folded = true;
 }
 
 impl App {
@@ -732,6 +761,32 @@ impl App {
 
     fn edit(&mut self, ev: Event, choice: usize) -> Vec<Set> {
         let component = self.screens[self.screen].component.name.clone();
+        // A level (a dial with its Mute): turns set it, first unmuting; a
+        // click toggles the mute; a hold closes it.
+        if let Some(m) = self.screens[self.screen].items.get(self.focus).and_then(|i| i.mute) {
+            let muted = self.screens[self.screen].level_muted(self.focus);
+            let items = &mut self.screens[self.screen].items;
+            let mute_set = |items: &mut [Item], on: bool| {
+                let c = &mut items[m].control;
+                c.value = json!(on);
+                c.string = None;
+                vec![Set { component: component.clone(), control: c.name.clone(), value: json!(on) }]
+            };
+            return match ev {
+                Event::Turn(_) if muted => mute_set(items, false),
+                Event::Turn(n) => {
+                    let c = &mut items[self.focus].control;
+                    let value = turn_percent(c, n);
+                    vec![Set { component, control: c.name.clone(), value }]
+                }
+                Event::Click => mute_set(items, !muted),
+                Event::Hold => {
+                    self.mode = Mode::Browse;
+                    Vec::new()
+                }
+                _ => Vec::new(),
+            };
+        }
         let Some(item) = self.screens[self.screen].items.get_mut(self.focus) else {
             self.mode = Mode::Browse;
             return Vec::new();
