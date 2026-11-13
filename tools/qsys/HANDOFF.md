@@ -110,7 +110,10 @@ The device-side QRC client, std + serde_json, blocking:
 
 ## The screen: `crates/surface`
 
-One screen per component (decided 2026-11-13). `app` is the state machine
+One screen per component (decided 2026-11-13). A Gain component is a volume knob
+(ring = level, click = mute, bypass and invert hidden). Invisible or
+Disabled controls and bypassed components are not shown (decided
+2026-11-13). `app` is the state machine
 (ring, click, hold; edit mode; component list), `render` draws the 480x480
 round face, `canvas::to_panel` lays it out turned and packed for the gen 3's
 480x640 panel, and `input` turns `REL_DIAL` counts (120 a detent, negative

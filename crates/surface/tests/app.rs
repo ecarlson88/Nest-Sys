@@ -3,7 +3,7 @@
 
 use qsys::{Change, Component, Control, Discovered, Widget, PREFIX};
 use serde_json::{json, Value};
-use surface::app::{App, Mode, Set};
+use surface::app::{App, Layout, Mode, Set};
 use surface::canvas::{Canvas, FACE};
 use surface::input::Event::{self, *};
 use surface::render::render;
@@ -73,7 +73,9 @@ fn has_a_screen_per_component_without_script_internals() {
     assert_eq!(combo.len(), 1);
     assert_eq!(combo[0].0, "Control");
     assert!(matches!(combo[0].1, Widget::Picker { .. }));
-    assert_eq!(app.watched()[1], ("NEST_Zone1".into(), vec!["bypass".into(), "gain".into(), "invert".into(), "mute".into()]));
+    // A gain is a volume knob: its gain and mute, its bypass followed.
+    assert!(matches!(app.screens[1].layout, Layout::Volume { .. }));
+    assert_eq!(app.watched()[1], ("NEST_Zone1".into(), vec!["gain".into(), "mute".into(), "bypass".into()]));
 }
 
 #[test]
@@ -93,11 +95,10 @@ fn the_ring_moves_between_controls_and_wraps() {
 #[test]
 fn the_components_stop_opens_the_list() {
     let mut app = design();
-    open(&mut app, "Zone1");
     run(&mut app, &[Turn(-1)]);
     assert!(app.on_components_stop());
     assert!(run(&mut app, &[Down, Up, Click]).is_empty());
-    assert_eq!(app.mode, Mode::Menu { focus: 1 });
+    assert_eq!(app.mode, Mode::Menu { focus: 0 });
 }
 
 #[test]
@@ -139,22 +140,46 @@ fn indicators_do_nothing_when_clicked() {
 }
 
 #[test]
-fn a_dial_steps_while_editing_and_stays_in_range() {
+fn a_gain_turns_with_the_ring_and_mutes_with_a_click() {
     let mut app = design();
     open(&mut app, "Zone1");
-    run(&mut app, &[Turn(1)]);
-    assert_eq!(focused(&app), "gain");
-    // 0 dB in the fixture, a 120 dB range: steps of 1 dB.
-    assert!(run(&mut app, &[Turn(1)]).is_empty(), "not editing yet");
-    run(&mut app, &[Turn(-1), Down, Up, Click]);
-    assert!(matches!(app.mode, Mode::Edit { .. }));
+    // 0 dB in the fixture, a 120 dB range: steps of 1 dB, sent at once.
     assert_eq!(run(&mut app, &[Turn(-1)]), [set("NEST_Zone1", "gain", json!(-1.0))]);
     assert_eq!(run(&mut app, &[Turn(3)]), [set("NEST_Zone1", "gain", json!(2.0))]);
     assert_eq!(run(&mut app, &[Turn(500)]), [set("NEST_Zone1", "gain", json!(20.0))]);
+    assert_eq!(run(&mut app, &[Down, Up, Click]), [set("NEST_Zone1", "mute", json!(true))]);
+    assert!(app.current().unwrap().muted());
+    assert_eq!(run(&mut app, &[Down, Up, Click]), [set("NEST_Zone1", "mute", json!(false))]);
+    assert_eq!(app.mode, Mode::Browse, "no editing on a volume screen");
+    run(&mut app, &[Down, Hold, Up]);
+    assert_eq!(app.mode, Mode::Menu { focus: 1 });
+}
+
+fn knobs() -> App {
+    let knob = Control::from_json(&json!({"Name": "knob.1", "Type": "Float", "Value": 5.0, "ValueMin": 0.0,
+                                          "ValueMax": 10.0, "Direction": "Read/Write"})).unwrap();
+    let led = Control::from_json(&json!({"Name": "led.1", "Type": "Boolean", "Value": false,
+                                         "Direction": "Read/Write"})).unwrap();
+    App::new(vec![Discovered {
+        component: Component { name: "NEST_Knobs".into(), kind: Some("custom_controls".into()) },
+        controls: vec![knob, led],
+    }], PREFIX)
+}
+
+#[test]
+fn a_dial_steps_while_editing_and_stays_in_range() {
+    let mut app = knobs();
+    assert_eq!(focused(&app), "knob.1");
+    assert!(run(&mut app, &[Turn(1), Turn(-1)]).is_empty(), "not editing yet");
+    run(&mut app, &[Down, Up, Click]);
+    assert!(matches!(app.mode, Mode::Edit { .. }));
+    // A range of 10: steps of 0.1.
+    assert_eq!(run(&mut app, &[Turn(-1)]), [set("NEST_Knobs", "knob.1", json!(4.9))]);
+    assert_eq!(run(&mut app, &[Turn(500)]), [set("NEST_Knobs", "knob.1", json!(10.0))]);
     run(&mut app, &[Down, Up, Click]);
     assert_eq!(app.mode, Mode::Browse);
     run(&mut app, &[Turn(1)]);
-    assert_eq!(focused(&app), "invert", "the ring moves on again");
+    assert_eq!(focused(&app), "led.1", "the ring moves on again");
 }
 
 #[test]
@@ -240,10 +265,9 @@ fn renders_every_control_in_every_mode() {
 }
 
 #[test]
-fn a_dial_snaps_an_odd_value_onto_its_steps() {
+fn a_gain_snaps_an_odd_value_onto_its_steps() {
     let mut app = design();
     open(&mut app, "Zone1");
-    run(&mut app, &[Turn(1), Down, Up, Click]);
     let gain = json!({"Component": "NEST_Zone1", "Name": "gain", "String": "-59.4dB", "Value": -59.36000061});
     app.apply(&Change::from_json(&gain).unwrap());
     assert_eq!(run(&mut app, &[Turn(-1)]), [set("NEST_Zone1", "gain", json!(-60.0))]);
@@ -251,9 +275,7 @@ fn a_dial_snaps_an_odd_value_onto_its_steps() {
 
 #[test]
 fn editing_ends_after_five_seconds_without_input() {
-    let mut app = design();
-    open(&mut app, "Zone1");
-    run(&mut app, &[Turn(1)]);
+    let mut app = knobs();
     app.handle(Click, 1_000);
     assert!(matches!(app.mode, Mode::Edit { .. }));
     assert!(!app.tick(5_999), "turns and clicks keep it open");
@@ -261,9 +283,9 @@ fn editing_ends_after_five_seconds_without_input() {
     assert!(!app.tick(9_999));
     assert!(app.tick(10_000));
     assert_eq!(app.mode, Mode::Browse);
-    // Turning now moves to the next control instead of changing the gain.
+    // Turning now moves to the next control instead of changing the knob.
     assert!(app.handle(Turn(1), 10_500).is_empty());
-    assert_eq!(focused(&app), "invert");
+    assert_eq!(focused(&app), "led.1");
     assert!(!app.tick(60_000), "browsing does not time out");
 }
 
@@ -275,4 +297,51 @@ fn a_timed_out_picker_sends_nothing() {
     app.handle(Turn(1), 100);
     assert!(app.tick(5_100));
     assert_eq!(app.focused().unwrap().control.string.as_deref(), Some("Streaming"));
+}
+
+fn change(v: Value) -> Change {
+    Change::from_json(&v).unwrap()
+}
+
+#[test]
+fn invisible_and_disabled_controls_are_skipped() {
+    let mut app = design();
+    let hide = |name: &str, flag: &str, on: bool| {
+        change(json!({"Component": "NEST_Panel", "Name": name, "String": "false", "Value": 0.0, flag: on}))
+    };
+    app.apply(&hide("meter.1", "Invisible", true));
+    app.apply(&hide("momentary.1", "Disabled", true));
+    run(&mut app, &[Turn(1)]);
+    assert_eq!(focused(&app), "text.1", "meter and momentary skipped");
+    // The focused control hidden: the focus moves on to the next.
+    app.apply(&hide("text.1", "Invisible", true));
+    assert_eq!(focused(&app), "text.display.1");
+    app.apply(&hide("meter.1", "Invisible", false));
+    run(&mut app, &[Turn(-1)]);
+    assert_eq!(focused(&app), "meter.1", "shown again");
+}
+
+#[test]
+fn a_bypassed_component_is_left_out() {
+    let mut app = design();
+    open(&mut app, "Zone1");
+    let bypass = |on: f64| change(json!({"Component": "NEST_Zone1", "Name": "bypass", "String": "", "Value": on}));
+    app.apply(&bypass(1.0));
+    assert_eq!(app.current().unwrap().title, "Panel", "moved off the bypassed screen");
+    assert_eq!(app.shown_screens(), [0, 2]);
+    run(&mut app, &[Down, Hold, Up, Turn(1)]);
+    assert_eq!(app.mode, Mode::Menu { focus: 2 }, "the list skips it");
+    app.apply(&bypass(0.0));
+    assert_eq!(app.shown_screens(), [0, 1, 2]);
+}
+
+#[test]
+fn nothing_shown_when_everything_is_hidden() {
+    let mut app = knobs();
+    for name in ["knob.1", "led.1"] {
+        app.apply(&change(json!({"Component": "NEST_Knobs", "Name": name, "String": "", "Value": 0.0, "Invisible": true})));
+    }
+    assert!(app.current().is_none());
+    assert!(run(&mut app, &[Turn(1), Down, Up, Click]).is_empty());
+    render(&app, &mut Canvas::new(FACE));
 }
