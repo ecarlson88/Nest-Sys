@@ -18,8 +18,8 @@ fn discovers_only_prefixed_components() {
     let mut q = connect(&core);
     let found = q.list(PREFIX).unwrap();
     let names: Vec<&str> = found.iter().map(|d| d.component.name.as_str()).collect();
-    // Nest_Combo differs in case and is left out.
-    assert_eq!(names, ["NEST_Panel", "NEST_Zone1"]);
+    // Case does not matter; Other_ Gain is left out.
+    assert_eq!(names, ["NEST_Panel", "NEST_Zone1", "Nest_Combo"]);
     assert_eq!(found[1].component.kind.as_deref(), Some("gain"));
     let gain = found[1].controls.iter().find(|c| c.name == "gain").unwrap();
     assert_eq!(pick(gain).0, Widget::Dial { min: -100.0, max: 20.0 });
@@ -63,7 +63,7 @@ fn reports_core_errors_with_method_and_message() {
         other => panic!("expected an RPC error, got {other:?}"),
     }
     // The connection is still usable after an error.
-    assert_eq!(q.list(PREFIX).unwrap().len(), 2);
+    assert_eq!(q.list(PREFIX).unwrap().len(), 3);
 }
 
 #[test]
@@ -94,7 +94,7 @@ fn needs_logon_when_the_core_has_users() {
     assert!(matches!(q.list(PREFIX), Err(Error::Rpc { code: 10, .. })));
     assert!(q.client.logon("admin", "wrong").is_err());
     q.client.logon("admin", "1234").unwrap();
-    assert_eq!(q.list(PREFIX).unwrap().len(), 2);
+    assert_eq!(q.list(PREFIX).unwrap().len(), 3);
 }
 
 #[test]
@@ -102,7 +102,7 @@ fn noop_needs_no_answer() {
     let core = MockCore::start();
     let mut q = connect(&core);
     q.client.noop().unwrap();
-    assert_eq!(q.list(PREFIX).unwrap().len(), 2);
+    assert_eq!(q.list(PREFIX).unwrap().len(), 3);
 }
 
 #[test]

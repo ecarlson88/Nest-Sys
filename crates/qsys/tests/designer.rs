@@ -1,7 +1,7 @@
 //! What Designer 2026's emulation returned for a test design
 //! (tests/data/designer), read as the screen reads it.
 
-use qsys::{pick, Component, Control, Direction, Kind, Widget, PREFIX};
+use qsys::{has_prefix, pick, pick_for, Component, Control, Direction, Kind, Widget, PREFIX};
 use serde_json::{json, Value};
 
 fn controls(fixture: &str) -> Vec<Control> {
@@ -18,8 +18,10 @@ fn reads_every_component_and_filters_by_prefix() {
     let v: Value = serde_json::from_str(include_str!("data/designer/components.json")).unwrap();
     let all: Vec<Component> = v.as_array().unwrap().iter().map(|c| Component::from_json(c).unwrap()).collect();
     assert_eq!(all.len(), 4);
-    let kept: Vec<&str> = all.iter().filter(|c| c.name.starts_with(PREFIX)).map(|c| c.name.as_str()).collect();
-    assert_eq!(kept, ["NEST_Panel", "NEST_Zone1"]);
+    let kept: Vec<&str> = all.iter().filter(|c| has_prefix(&c.name, PREFIX)).map(|c| c.name.as_str()).collect();
+    assert_eq!(kept, ["NEST_Panel", "NEST_Zone1", "Nest_Combo"]);
+    // NEST_Hidden, with Script Access None, is not listed at all.
+    assert!(!all.iter().any(|c| c.name.eq_ignore_ascii_case("NEST_Hidden")));
 }
 
 #[test]
@@ -50,4 +52,23 @@ fn reads_custom_controls() {
     for name in ["led.1", "meter.1", "text.display.1"] {
         assert_eq!(find(&list, name).direction, Direction::ReadWrite, "{name}");
     }
+}
+
+#[test]
+fn picks_custom_controls_widgets_by_name() {
+    let panel = Component { name: "NEST_Panel".into(), kind: Some("custom_controls".into()) };
+    let list = controls(include_str!("data/designer/controls_NEST_Panel.json"));
+    let widgets: Vec<(&str, Widget)> = list.iter().map(|c| (c.name.as_str(), pick_for(&panel, c).0)).collect();
+    assert_eq!(
+        widgets,
+        [
+            ("led.1", Widget::Indicator),
+            ("meter.1", Widget::Meter { min: -120.0, max: 20.0 }),
+            ("momentary.1", Widget::Momentary),
+            ("text.1", Widget::TextEntry),
+            ("text.display.1", Widget::Label),
+            ("toggle.1", Widget::Toggle),
+            ("trigger.1", Widget::Button),
+        ]
+    );
 }

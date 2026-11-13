@@ -23,7 +23,9 @@ in Properties and set **Script Access** to **External** (or All):
 | Code Name | Component | What it checks |
 |---|---|---|
 | `NEST_Zone1` | Gain | Float with range (gain), Boolean (mute) |
-| `NEST_Panel` | Custom Controls, with: a Knob (Integer, e.g. 1–4), a Toggle button, a Momentary button, a Trigger button, a Text box, a Combo box, an LED, a Meter | every control type the UI might meet; especially what a Combo box reports (a choice list?) |
+| `NEST_Panel` | Custom Controls, with: a Toggle button, a Momentary button, a Trigger button, a Text box, a display text, an LED, a Meter | widgets read from Custom Controls' names |
+| `NEST_Combo` | Text Controller running `combo_box.lua` | what a combo box reports (a `Choices` list?) |
+| `NEST_Knob` | Gain, set to knob style | whether a knob differs from a fader over QRC |
 | `NEST_Hidden` | Gain, **Script Access = None** | that it is left out |
 | `Other_Gain` | Gain, Script Access = External | the prefix filter |
 
@@ -52,11 +54,9 @@ and allow Designer through the Windows firewall if it asks.
 - Do controls have `Type`, `ValueMin`, `ValueMax`? What exact `Type` strings
   appear (Float/Integer/Boolean/Trigger/Text/…)?
 - Is a Boolean's `Value` `true/false` or `0/1`?
-- What does a Combo box report? Is there a `Choices` field?
-- How do Momentary and Trigger buttons differ in `Type`?
-- Is `NEST_Hidden` absent from `--all`?
-- Did `--watch` print changes? Do they include `Component`?
-- Did `--set` change the control in Designer?
+- What does the combo box report? Is there a `Choices` field? (Answered
+  for everything else: see HANDOFF.md, "Q-SYS QRC".)
+- Does the knob-style Gain differ from a fader in any field?
 
 ## Offline
 

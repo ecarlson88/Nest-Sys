@@ -16,8 +16,8 @@ pub struct Discovered {
 }
 
 pub trait Transport {
-    /// The components whose Code Name starts with prefix, in the Core's
-    /// order, with their controls.
+    /// The components whose Code Name starts with prefix (in any case), in
+    /// the Core's order, with their controls.
     fn list(&mut self, prefix: &str) -> Result<Vec<Discovered>>;
     /// One control's current state.
     fn get(&mut self, component: &str, control: &str) -> Result<Change>;
@@ -45,7 +45,7 @@ impl<S: Read + Write> Transport for Qrc<S> {
     fn list(&mut self, prefix: &str) -> Result<Vec<Discovered>> {
         let components = self.client.components()?;
         let mut found = Vec::new();
-        for component in components.into_iter().filter(|c| c.name.starts_with(prefix)) {
+        for component in components.into_iter().filter(|c| crate::has_prefix(&c.name, prefix)) {
             let controls = self.client.controls(&component.name)?;
             found.push(Discovered { component, controls });
         }

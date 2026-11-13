@@ -75,13 +75,46 @@ class QRC:
             self.notifications.append(m)
 
 
-def pick_widget(c):
+def base_name(name):
+    """A control's name without its index: "text.display" for "text.display.1"."""
+    base, dot, index = name.rpartition(".")
+    return base if dot and index.isdigit() else name
+
+
+SCRIPT_INTERNAL = ("code", "reload", "halt.catch.fire", "magic.number")
+
+
+def pick_widget(c, comp_type=""):
     """Map one control (dict from Component.GetControls) to a UI widget.
+
+    Type and Direction cannot tell an indicator from an input, so in Custom
+    Controls the names Q-SYS gives them decide (led, meter, momentary,
+    text.display); a script component's own controls are hidden. Same rules
+    as widget::pick_for in crates/qsys.
 
     Returns (widget, note). Uses Type/ValueMin/ValueMax/Direction when present
     and falls back to the Python type of Value. 'note' flags missing metadata so
     the test run shows what the Core really provides.
     """
+    name = str(c.get("Name", ""))
+    if comp_type == "device_controller_script" and (
+            name in SCRIPT_INTERNAL or name.startswith(("script.", "log."))):
+        return "hidden", ""
+    widget, note = _pick_by_type(c)
+    if comp_type == "custom_controls":
+        base = base_name(name)
+        if base == "led":
+            widget = "indicator"
+        elif base == "meter" and widget == "dial":
+            widget = "meter"
+        elif base == "text.display":
+            widget = "label"
+        elif base == "momentary" and widget == "toggle":
+            widget = "momentary"
+    return widget, note
+
+
+def _pick_by_type(c):
     t = str(c.get("Type", "")).strip().lower()
     d = str(c.get("Direction", "")).strip().lower()
     v = c.get("Value")
@@ -119,7 +152,9 @@ def pick_widget(c):
     if t == "status":
         return "label", "; ".join(notes)
     if kind == "text":
-        return ("label" if read_only else "text-entry (picker)"), "; ".join(notes)
+        if read_only:
+            return "label", "; ".join(notes)
+        return ("picker" if c.get("Choices") else "text-entry"), "; ".join(notes)
     if kind == "number":
         have_range = isinstance(vmin, (int, float)) and isinstance(vmax, (int, float)) and vmax > vmin
         if read_only:
@@ -141,7 +176,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("host")
     ap.add_argument("--port", type=int, default=1710)
-    ap.add_argument("--prefix", default="NEST_", help="Code Name prefix to keep (default NEST_)")
+    ap.add_argument("--prefix", default="NEST_", help="Code Name prefix to keep, any case (default NEST_)")
     ap.add_argument("--user")
     ap.add_argument("--password", default="")
     ap.add_argument("--raw", action="store_true", help="print raw GetComponents/GetControls JSON")
@@ -176,7 +211,8 @@ def main():
             print("--- GetComponents raw ---")
             print(json.dumps(comps, indent=2))
         names = [c.get("Name", "") for c in comps]
-        keep = names if args.all else [n for n in names if n.startswith(args.prefix)]
+        types = {c.get("Name", ""): c.get("Type", "") for c in comps}
+        keep = names if args.all else [n for n in names if n.lower().startswith(args.prefix.lower())]
         print("%d named components in design, %d match %s" % (
             len(names), len(keep), "(all)" if args.all else repr(args.prefix)))
         if not keep:
@@ -195,7 +231,7 @@ def main():
             print(fmt("control", 26) + fmt("type", 9) + fmt("value", 12) + fmt("min", 8)
                   + fmt("max", 8) + fmt("dir", 11) + fmt("widget", 20) + "notes")
             for c in ctrls:
-                w, note = pick_widget(c)
+                w, note = pick_widget(c, types.get(name, ""))
                 print(fmt(c.get("Name"), 26) + fmt(c.get("Type"), 9) + fmt(c.get("String", c.get("Value")), 12)
                       + fmt(c.get("ValueMin"), 8) + fmt(c.get("ValueMax"), 8)
                       + fmt(c.get("Direction"), 11) + fmt(w, 20) + note)
