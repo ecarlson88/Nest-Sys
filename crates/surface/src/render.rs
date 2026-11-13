@@ -46,6 +46,7 @@ pub fn render(app: &App, canvas: &mut Canvas) {
         (None, _) => status(canvas, "No controls", "Give components a NEST_ Code Name and Script Access External"),
         (Some(_), Mode::Menu { focus }) => menu(app, focus, canvas),
         (Some(screen), _) if matches!(screen.layout, Layout::Volume { .. }) => volume(screen, canvas),
+        (Some(screen), mode) if matches!(screen.layout, Layout::Selector { .. }) => selector(screen, mode, canvas),
         (Some(screen), mode) => {
             match app.focused() {
                 Some(item) => control(app, screen, item, mode, canvas),
@@ -269,14 +270,47 @@ fn control(app: &App, screen: &Screen, item: &Item, mode: Mode, canvas: &mut Can
 /// A combo box being chosen from: the choices as a wheel around the one
 /// that a click would pick.
 fn picker_wheel(canvas: &mut Canvas, label: &str, choices: &[String], choice: usize) {
-    let n = choices.len();
+    wheel(canvas, label, choices, choice, EDIT);
+    canvas.text_centred(C, 430.0, "Click picks · hold cancels", 17.0, Weight::Regular, 260.0, DIM);
+}
+
+/// choices as a wheel around `choice`, highlighted in rgb.
+fn wheel(canvas: &mut Canvas, label: &str, choices: &[String], choice: usize, rgb: u32) {
     canvas.text_centred(C, 70.0, label, 22.0, Weight::Regular, 260.0, DIM);
-    canvas.line(90.0, 240.0, 390.0, 240.0, 78.0, mix(BG, EDIT, 0.22));
-    canvas.text_centred(C, 240.0, &choices[choice], 40.0, Weight::Bold, 320.0, EDIT);
-    for (offset, i) in neighbours(n, choice) {
+    canvas.line(90.0, 240.0, 390.0, 240.0, 78.0, mix(BG, rgb, 0.22));
+    canvas.text_centred(C, 240.0, &choices[choice], 40.0, Weight::Bold, 320.0, rgb);
+    for (offset, i) in neighbours(choices.len(), choice) {
         wheel_row(canvas, offset, &choices[i]);
     }
-    canvas.text_centred(C, 430.0, "Click picks · hold cancels", 17.0, Weight::Regular, 260.0, DIM);
+}
+
+/// A component whose one control is a combo box: its choices always on a
+/// wheel, the current one at rest, the one a click would pick while turning.
+fn selector(screen: &Screen, mode: Mode, canvas: &mut Canvas) {
+    let Layout::Selector { item } = screen.layout else { return };
+    let c = &screen.items[item].control;
+    let Widget::Picker { choices } = &screen.items[item].widget else { return };
+    if choices.is_empty() {
+        return;
+    }
+    match mode {
+        Mode::Edit { choice } => {
+            wheel(canvas, &screen.title, choices, choice.min(choices.len() - 1), EDIT);
+            canvas.text_centred(C, 430.0, "Click to select", 18.0, Weight::Regular, 260.0, DIM);
+        }
+        _ => {
+            let current = choices.iter().position(|ch| Some(ch.as_str()) == c.string.as_deref());
+            match current {
+                Some(at) => wheel(canvas, &screen.title, choices, at, ACCENT),
+                // A value not among the choices: shown on its own.
+                None => {
+                    canvas.text_centred(C, 70.0, &screen.title, 22.0, Weight::Regular, 260.0, DIM);
+                    canvas.text_centred(C, 240.0, &shown(c), 40.0, Weight::Bold, 360.0, FG);
+                }
+            }
+            canvas.text_centred(C, 430.0, "Turn to choose", 18.0, Weight::Regular, 260.0, DIM);
+        }
+    }
 }
 
 /// The stop after a screen's last control: back to the list.
