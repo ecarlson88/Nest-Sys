@@ -190,3 +190,32 @@ First things to check on a unit: that the face is upright and round on the
 panel, that the ring turns the right way (clockwise moves forward), how fast
 it draws (`cargo run --release -p surface --example bench` gives the
 desktop's numbers to compare), and whether the unit suspends while it runs.
+
+`--diag` checks most of these without a Core:
+
+```sh
+sh /media/data/nest-surface/nest-surface.sh --diag
+```
+
+It prints what the framebuffer (size, bits a pixel, channel offsets,
+stride, pages), the backlight and each input device report (its name, and
+whether it sends the ring's `REL_DIAL`/`REL_X` and the click's
+`KEY_ENTER`/`KEY_POWER`), then shows a test pattern through the same path
+as the screen and prints how long a frame takes to draw and to show. On the
+pattern:
+
+- the arrow points up and reads **UP**, **L** is on the left and **R** on the
+  right (otherwise the face is turned or mirrored);
+- the white circle and its four ticks are whole and round, not cut off or
+  oval;
+- the bars read red, green, blue, white from the left (otherwise the
+  channels are swapped), and the grey ramp is smooth (bands mean 16-bit
+  colour);
+- the orange dot moves clockwise when the ring turns clockwise, a step a
+  detent, and the counts below follow; a green dot shows while the click is
+  pressed, and holding it 0.7 s counts a hold.
+
+Every event the input devices send is printed as it comes (device, type,
+code, value), then what it counted as. Without a usable framebuffer it
+still reads the ring and the click. Ctrl-C stops it and puts the display
+back; its output goes to the terminal, not to the log.

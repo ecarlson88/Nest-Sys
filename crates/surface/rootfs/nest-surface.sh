@@ -9,13 +9,18 @@
 #
 # The surface's files are in /media/data/nest-surface: nest-surface, this
 # launcher, config.json (the Core's address) and settings.json. Its log is
-# /tmp/nest-surface.log. Arguments are passed on to nest-surface.
+# /tmp/nest-surface.log. Arguments are passed on to nest-surface; with
+# --diag (no Core needed), its report goes to this terminal instead.
 dir=/media/data/nest-surface
 run=/var/run/unfr0zen
 log=/tmp/nest-surface.log
 
 surface() {
-    "$dir/nest-surface" "$@" >> "$log" 2>&1 &
+    if [ "${1:-}" = --diag ]; then
+        "$dir/nest-surface" "$@" &
+    else
+        "$dir/nest-surface" "$@" >> "$log" 2>&1 &
+    fi
     child=$!
     # Stopped (by monit, init or Ctrl-C), stop the surface, which puts the
     # display back before it exits.

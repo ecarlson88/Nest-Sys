@@ -9,6 +9,7 @@
 
 pub mod app;
 pub mod canvas;
+pub mod diag;
 #[cfg(target_os = "linux")]
 pub mod device;
 pub mod input;
