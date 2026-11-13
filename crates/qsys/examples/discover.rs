@@ -7,7 +7,7 @@
 use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
-use qsys::{pick, Client, Qrc, Transport, DEFAULT_PORT, PREFIX};
+use qsys::{pick_for, Client, Qrc, Transport, Widget, DEFAULT_PORT, PREFIX};
 use serde_json::Value;
 
 struct Args {
@@ -91,7 +91,10 @@ fn run(a: Args) -> qsys::Result<()> {
         println!("{}{}{}{}{}{}{}notes", cell("control", 26), cell("type", 9), cell("value", 12),
                  cell("min", 8), cell("max", 8), cell("dir", 11), cell("widget", 14));
         for c in &d.controls {
-            let (w, notes) = pick(c);
+            let (w, notes) = pick_for(&d.component, c);
+            if w == Widget::Hidden {
+                continue;
+            }
             let notes: Vec<&str> = notes.iter().map(|n| n.text()).collect();
             let dir = format!("{:?}", c.direction);
             println!("{}{}{}{}{}{}{}{}", cell(&c.name, 26), cell(c.type_name.as_deref().unwrap_or(""), 9),

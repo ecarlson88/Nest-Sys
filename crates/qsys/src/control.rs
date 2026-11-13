@@ -103,6 +103,8 @@ pub struct Control {
     pub position: Option<f64>,
     pub min: Option<f64>,
     pub max: Option<f64>,
+    /// A combo box's options. Expected from QRC, not yet seen from a Core.
+    pub choices: Option<Vec<String>>,
     /// The ends of the range as the Core renders them (e.g. "-100dB").
     pub string_min: Option<String>,
     pub string_max: Option<String>,
@@ -130,6 +132,9 @@ impl Control {
             position: v.get("Position").and_then(Value::as_f64),
             min: v.get("ValueMin").and_then(Value::as_f64),
             max: v.get("ValueMax").and_then(Value::as_f64),
+            choices: v.get("Choices").and_then(Value::as_array).map(|a| {
+                a.iter().filter_map(Value::as_str).map(str::to_owned).collect()
+            }),
             string_min: text("StringMin"),
             string_max: text("StringMax"),
             direction: Direction::parse(direction),
