@@ -1,6 +1,6 @@
 //! A fake Core speaking QRC on 127.0.0.1, for tests. Its design is the one
 //! Designer's emulation described in tests/data/designer (the controls of
-//! Other_ Gain and Nest_Combo were not captured, so it has none); how it
+//! Other_ Gain were not captured, so it has none); how it
 //! answers Set, Get and change groups is assumed from what Designer printed.
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -42,6 +42,7 @@ impl MockCore {
         for fixture in [
             include_str!("../data/designer/controls_NEST_Panel.json"),
             include_str!("../data/designer/controls_NEST_Zone1.json"),
+            include_str!("../data/designer/controls_Nest_Combo.json"),
         ] {
             let list: Value = serde_json::from_str(fixture).unwrap();
             let name = list["Name"].as_str().unwrap();

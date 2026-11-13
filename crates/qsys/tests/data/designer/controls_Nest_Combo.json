@@ -1,0 +1,144 @@
+{
+  "Name": "Nest_Combo",
+  "Controls": [
+    {
+      "Name": "Control",
+      "Type": "Text",
+      "String": "Streaming",
+      "Direction": "Read/Write"
+    },
+    {
+      "Name": "code",
+      "Type": "Text",
+      "String": "-- Combo box for testing the Nest: paste into a Text Controller whose Code\r\n-- Name starts with NEST_ (any case) and Script Access is External or All.\r\n--\r\n-- The Text Controller needs one Text control (Designer's default is\r\n-- \"Control\", count 1, seen over QRC as \"Control.1\"). To see the list in\r\n-- Designer, drag that control to the schematic or a UCI and set its style\r\n-- to Combo Box.\r\n\r\nlocal choices = { \"Mic 1\", \"Mic 2\", \"Laptop\", \"Streaming\" }\r\n\r\n-- A single control is Controls.Control; a group of them is a table.\r\nlocal combo = Controls.Control\r\nif type(combo) == \"table\" then\r\n  combo = combo[1]\r\nend\r\n\r\ncombo.Choices = choices\r\nif combo.String == \"\" then\r\n  combo.String = choices[1]\r\nend\r\n\r\ncombo.EventHandler = function(ctl)\r\n  print(\"NEST combo: \" .. ctl.String)\r\nend",
+      "Direction": "Read/Write"
+    },
+    {
+      "Name": "halt.catch.fire",
+      "Type": "Boolean",
+      "Value": false,
+      "String": "false",
+      "Position": 0.0,
+      "Direction": "Read Only"
+    },
+    {
+      "Name": "log.clear",
+      "Type": "Trigger",
+      "Value": 0.0,
+      "Direction": "Read/Write"
+    },
+    {
+      "Name": "log.entry",
+      "Type": "Text",
+      "String": "",
+      "Direction": "Write Only"
+    },
+    {
+      "Name": "log.entry.hex",
+      "Type": "Text",
+      "String": "",
+      "Direction": "Write Only"
+    },
+    {
+      "Name": "log.entry.mixed",
+      "Type": "Text",
+      "String": "",
+      "Direction": "Write Only"
+    },
+    {
+      "Name": "log.history",
+      "Type": "",
+      "String": "2026-11-13T04:14:46.377Starting Script",
+      "Direction": "Read Only"
+    },
+    {
+      "Name": "log.history.hex",
+      "Type": "",
+      "String": "2026-11-13T04:14:46.377\\x53\\x74\\x61\\x72\\x74\\x69\\x6e\\x67\\x20\\x53\\x63\\x72\\x69\\x70\\x74",
+      "Direction": "Read Only"
+    },
+    {
+      "Name": "log.history.mixed",
+      "Type": "",
+      "String": "2026-11-13T04:14:46.377Starting\u2420Script",
+      "Direction": "Read Only"
+    },
+    {
+      "Name": "magic.number",
+      "Type": "Text",
+      "String": "00000000-0000-0000-0000-000000000000",
+      "Direction": "Read/Write"
+    },
+    {
+      "Name": "reload",
+      "Type": "Trigger",
+      "Value": 0.0,
+      "Direction": "Read/Write"
+    },
+    {
+      "Name": "script.blockly.code",
+      "Type": "Text",
+      "String": "",
+      "Direction": "Read/Write"
+    },
+    {
+      "Name": "script.error.count",
+      "Type": "Integer",
+      "Value": 0,
+      "ValueMin": 0.0,
+      "ValueMax": 99999.0,
+      "StringMin": "0",
+      "StringMax": "99999",
+      "String": "0",
+      "Position": 0.0,
+      "Direction": "Read Only"
+    },
+    {
+      "Name": "script.info",
+      "Type": "Text",
+      "String": "",
+      "Direction": "Read Only"
+    },
+    {
+      "Name": "script.load",
+      "Type": "Float",
+      "Value": 0.0,
+      "ValueMin": 0.0,
+      "ValueMax": 1000000000.0,
+      "StringMin": "0",
+      "StringMax": "1000000000.000",
+      "String": "0",
+      "Position": 0.0,
+      "Direction": "Read Only"
+    },
+    {
+      "Name": "script.memory",
+      "Type": "Float",
+      "Value": 0.0,
+      "ValueMin": 0.0,
+      "ValueMax": 3.4028234663852886e+38,
+      "StringMin": "0",
+      "StringMax": "over",
+      "String": "0",
+      "Position": 0.0,
+      "Direction": "Read Only"
+    },
+    {
+      "Name": "script.status",
+      "Type": "Status",
+      "Value": 0.0,
+      "ValueMin": 0.0,
+      "ValueMax": 5.0,
+      "StringMin": "OK",
+      "StringMax": "Initializing",
+      "String": "OK",
+      "Direction": "Read Only"
+    },
+    {
+      "Name": "script.stop",
+      "Type": "Trigger",
+      "Value": 0.0,
+      "Direction": "Read/Write"
+    }
+  ]
+}
