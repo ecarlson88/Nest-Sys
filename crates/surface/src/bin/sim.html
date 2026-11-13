@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nest surface</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; min-height: 100vh; display: flex; flex-direction: column; align-items: center;
+         justify-content: center; gap: 24px; background: #151515; color: #aaa;
+         font: 14px/1.5 system-ui, sans-serif; }
+  #ring { width: 520px; height: 520px; max-width: 92vw; max-height: 92vw; border-radius: 50%;
+          display: flex; align-items: center; justify-content: center; cursor: pointer;
+          background: radial-gradient(circle, #8a8f94 60%, #50555a 100%); user-select: none;
+          box-shadow: 0 10px 40px #000a; }
+  #ring.down { box-shadow: 0 4px 16px #000a; transform: scale(0.99); }
+  #face { width: 92.3%; height: 92.3%; border-radius: 50%; background: #000; display: block; }
+  kbd { background: #2a2a2a; border-radius: 4px; padding: 1px 6px; color: #ddd; }
+</style>
+</head>
+<body>
+<div id="ring" tabindex="0"><img id="face" alt="The Nest's screen" src="/frame.png" draggable="false"></div>
+<div>Ring: mouse wheel or <kbd>←</kbd> <kbd>→</kbd> &nbsp; Click: mouse button or <kbd>Space</kbd> &nbsp; Hold the click for the component list</div>
+<script>
+const ring = document.getElementById('ring');
+const face = document.getElementById('face');
+const send = (e, n) => fetch('/input?e=' + e + (n ? '&n=' + n : ''), { method: 'POST' });
+let down = false;
+const press = () => { if (!down) { down = true; ring.classList.add('down'); send('down'); } };
+const release = () => { if (down) { down = false; ring.classList.remove('down'); send('up'); } };
+let wheel = 0;
+ring.addEventListener('wheel', ev => {
+  ev.preventDefault();
+  wheel += ev.deltaY;
+  const steps = Math.trunc(wheel / 60);
+  if (steps) { wheel -= steps * 60; send('turn', steps); }
+}, { passive: false });
+ring.addEventListener('mousedown', press);
+window.addEventListener('mouseup', release);
+window.addEventListener('keydown', ev => {
+  if (ev.key === 'ArrowRight' || ev.key === 'ArrowDown') { send('turn', 1); ev.preventDefault(); }
+  else if (ev.key === 'ArrowLeft' || ev.key === 'ArrowUp') { send('turn', -1); ev.preventDefault(); }
+  else if (ev.key === ' ' && !ev.repeat) { press(); ev.preventDefault(); }
+});
+window.addEventListener('keyup', ev => { if (ev.key === ' ') release(); });
+let shown = -1;
+async function refresh() {
+  try {
+    const v = +(await (await fetch('/version')).text());
+    if (v !== shown) { shown = v; face.src = '/frame.png?v=' + v; }
+  } catch (e) {}
+  setTimeout(refresh, 100);
+}
+refresh();
+ring.focus();
+</script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+[package]
+name = "surface"
+version = "0.1.0"
+edition.workspace = true
+description = "The round screen of the Nest as a Q-SYS control surface: one component per screen, driven by the ring and its click"
+
+[dependencies]
+qsys = { path = "../qsys" }
+serde_json = "1"
+font8x8 = { version = "0.3", default-features = false, features = ["unicode"] }
+png = "0.17"

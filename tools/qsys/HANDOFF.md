@@ -108,6 +108,17 @@ The device-side QRC client, std + serde_json, blocking:
 - Tests against an in-process fake Core (`crates/qsys/tests/`); the example
   `cargo run -p qsys --example discover -- HOST` runs against Designer.
 
+## The screen: `crates/surface`
+
+One screen per component (decided 2026-11-13). `app` is the state machine
+(ring, click, hold; edit mode; component list), `render` draws the 480x480
+round face, `canvas::to_panel` lays it out turned and packed for the gen 3's
+480x640 panel, and `input` turns `REL_DIAL` counts (120 a detent, negative
+clockwise) and `KEY_ENTER` into turns, clicks and holds. The `sim` binary
+runs it against a Core in a browser (`tools/qsys/README.md`). Still to do
+for the unit: a framebuffer and evdev backend in place of the browser, and
+reconnecting when the Core goes away.
+
 ## Suggested milestones
 
 1. Real-Core run of `qrc_discover.py --raw`; settle the field names and widget rules.

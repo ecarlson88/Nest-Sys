@@ -64,3 +64,37 @@ and allow Designer through the Windows firewall if it asks.
 python3 mock_qrc_server.py 11710 &
 python3 qrc_discover.py 127.0.0.1 --port 11710 --watch 5
 ```
+
+## The screen, simulated
+
+`crates/surface` is the Nest's screen: one screen per `NEST_` component.
+Its simulator runs it against a Core or Designer's emulation and shows the
+round face in a browser.
+
+You need Rust (https://rustup.rs). From the repository root, with Designer
+emulating:
+
+```sh
+cargo run --release -p surface --bin sim -- 127.0.0.1
+```
+
+Then open http://127.0.0.1:8480.
+
+| On the Nest | In the browser |
+|---|---|
+| turn the ring | mouse wheel, or ← → |
+| click | mouse button on the face, or Space |
+| hold the click (0.7 s) | hold the mouse button or Space |
+
+- **On a screen:** the ring moves between the component's controls. A click
+  flips a toggle, fires a trigger, or opens a dial or combo box for editing.
+  A momentary button is on while the click is down.
+- **Editing:** the ring changes a dial's value as it turns (sent live). For a
+  combo box it moves through the choices; a click picks one, a hold cancels.
+  A click closes a dial.
+- **Hold** on a screen opens the list of components. There, the ring moves,
+  a click opens a component, and a hold goes back.
+
+The first build downloads and compiles dependencies and takes a few
+minutes. Options: `--port`, `--user`/`--password`, `--prefix`,
+`--listen ADDR` (e.g. `0.0.0.0:8480` to open it from a phone on the LAN).
