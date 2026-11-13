@@ -127,7 +127,12 @@ fn a_click_flips_a_toggle_and_fires_a_trigger() {
     assert!(app.focused().unwrap().control.is_on());
     assert_eq!(run(&mut app, &[Down, Up, Click]), [set("NEST_Panel", "toggle.1", json!(false))]);
     run(&mut app, &[Turn(1)]);
-    assert_eq!(run(&mut app, &[Down, Up, Click]), [set("NEST_Panel", "trigger.1", json!(1))]);
+    app.handle(Click, 1_000);
+    assert!(app.flash.is_some(), "a fired trigger flashes");
+    assert!(!app.tick(1_100));
+    assert!(app.tick(1_000 + surface::app::FLASH_MS));
+    assert!(app.flash.is_none());
+    assert_eq!(app.handle(Click, 2_000), [set("NEST_Panel", "trigger.1", json!(1))]);
 }
 
 #[test]
@@ -150,6 +155,11 @@ fn a_gain_turns_with_the_ring_and_mutes_with_a_click() {
     assert_eq!(run(&mut app, &[Down, Up, Click]), [set("NEST_Zone1", "mute", json!(true))]);
     assert!(app.current().unwrap().muted());
     assert_eq!(run(&mut app, &[Down, Up, Click]), [set("NEST_Zone1", "mute", json!(false))]);
+    // Muted, a turn unmutes and leaves the level; the next turn moves it.
+    run(&mut app, &[Down, Up, Click]);
+    assert_eq!(run(&mut app, &[Turn(-1)]), [set("NEST_Zone1", "mute", json!(false))]);
+    assert!(!app.current().unwrap().muted());
+    assert_eq!(run(&mut app, &[Turn(-1)]), [set("NEST_Zone1", "gain", json!(19.0))]);
     assert_eq!(app.mode, Mode::Browse, "no editing on a volume screen");
     run(&mut app, &[Down, Hold, Up]);
     assert_eq!(app.mode, Mode::Menu { focus: 1 });
@@ -221,8 +231,10 @@ fn the_list_of_components_opens_and_closes() {
     run(&mut app, &[Turn(-1)]);
     assert_eq!(app.mode, Mode::Menu { focus: 2 });
     run(&mut app, &[Down, Hold, Up]);
-    assert_eq!(app.mode, Mode::Browse, "a hold goes back");
-    assert_eq!(app.current().unwrap().title, "Panel");
+    assert_eq!(app.mode, Mode::Menu { focus: 2 }, "a hold does nothing in the list");
+    run(&mut app, &[Down, Up, Click]);
+    assert_eq!(app.mode, Mode::Browse);
+    assert_eq!(app.current().unwrap().title, "Combo");
 }
 
 #[test]

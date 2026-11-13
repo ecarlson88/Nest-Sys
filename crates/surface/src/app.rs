@@ -3,9 +3,9 @@
 //!
 //! One component per screen, of two layouts:
 //!
-//! - **Volume**, for a gain component: the ring sets the gain as it turns,
-//!   a click toggles its mute, and a hold opens the list of components.
-//!   Its bypass and invert are not shown.
+//! - **Volume**, for a gain component: the ring sets the gain as it turns
+//!   (while muted, it first unmutes), a click toggles its mute, and a hold
+//!   opens the list of components. Its bypass and invert are not shown.
 //! - **Controls**, for any other: the ring moves between its controls and,
 //!   after the last, a "Components" stop (wrapping); a click acts on the
 //!   control (a toggle flips, a button fires, a dial, number or picker opens
@@ -16,8 +16,8 @@
 //! a picker's when the click picks it) and a click or hold closes it, as
 //! does EDIT_TIMEOUT_MS without input (a picker's choice is then dropped).
 //! A momentary button is on while the click is down, and its release is
-//! always sent. The list of components: the ring moves, a click opens one,
-//! a hold goes back.
+//! always sent. The list of components ("Controls" on screen): the ring
+//! moves and a click opens one. A trigger flashes for FLASH_MS when fired.
 //!
 //! Controls the Core reports Invisible or Disabled are not shown, and a
 //! component whose `bypass` is on is left out altogether, for as long as
@@ -31,6 +31,9 @@ use crate::input::Event;
 /// Editing ends after this long without a turn or a click, so the next
 /// person to turn the ring does not change a value unawares.
 pub const EDIT_TIMEOUT_MS: u64 = 5000;
+
+/// How long a fired trigger shows as pressed.
+pub const FLASH_MS: u64 = 400;
 
 /// The component type Q-SYS gives a Gain.
 pub const GAIN: &str = "gain";
@@ -124,6 +127,8 @@ pub struct App {
     pub pressed: Option<(String, String)>,
     /// When the last input came, in the caller's milliseconds.
     pub last_input_ms: u64,
+    /// A trigger just fired: (component, control, until when).
+    pub flash: Option<(String, String, u64)>,
 }
 
 /// The title of a component's screen: its Code Name without the prefix,
@@ -232,7 +237,7 @@ fn screen_of(d: Discovered, prefix: &str) -> Option<Screen> {
 impl App {
     pub fn new(found: Vec<Discovered>, prefix: &str) -> App {
         let screens = found.into_iter().filter_map(|d| screen_of(d, prefix)).collect();
-        let mut app = App { screens, screen: 0, focus: 0, mode: Mode::Browse, pressed: None, last_input_ms: 0 };
+        let mut app = App { screens, screen: 0, focus: 0, mode: Mode::Browse, pressed: None, last_input_ms: 0, flash: None };
         app.settle();
         app
     }
@@ -281,6 +286,10 @@ impl App {
     /// Time passing: ends editing after EDIT_TIMEOUT_MS without input.
     /// Returns whether anything changed on screen.
     pub fn tick(&mut self, now_ms: u64) -> bool {
+        if self.flash.as_ref().is_some_and(|f| now_ms >= f.2) {
+            self.flash = None;
+            return true;
+        }
         if matches!(self.mode, Mode::Edit { .. }) && now_ms.saturating_sub(self.last_input_ms) >= EDIT_TIMEOUT_MS {
             self.mode = Mode::Browse;
             return true;
@@ -353,7 +362,6 @@ impl App {
                         self.focus = self.screens[focus].stops()[0];
                         self.mode = Mode::Browse;
                     }
-                    Event::Hold => self.mode = Mode::Browse,
                     _ => {}
                 }
                 Vec::new()
@@ -370,6 +378,14 @@ impl App {
         let screen = &mut self.screens[self.screen];
         let component = screen.component.name.clone();
         match ev {
+            // While muted, the first turn unmutes and leaves the level.
+            Event::Turn(_) if screen.muted() => {
+                let m = mute.expect("muted means a mute");
+                let c = &mut screen.items[m].control;
+                c.value = json!(false);
+                c.string = None;
+                vec![Set { component, control: c.name.clone(), value: json!(false) }]
+            }
             Event::Turn(n) => {
                 let c = &mut screen.items[gain].control;
                 let value = turn_number(c, n);
@@ -429,7 +445,10 @@ impl App {
                 set(item, json!(on))
             }
             // Any value fires a trigger.
-            (Event::Click, Widget::Button) => set(item, json!(1)),
+            (Event::Click, Widget::Button) => {
+                self.flash = Some((component.clone(), item.control.name.clone(), self.last_input_ms + FLASH_MS));
+                set(item, json!(1))
+            }
             (Event::Click, Widget::Dial { .. } | Widget::NumberEntry) => {
                 self.mode = Mode::Edit { choice: 0 };
                 Vec::new()

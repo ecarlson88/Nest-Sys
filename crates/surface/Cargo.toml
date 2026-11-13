@@ -7,5 +7,5 @@ description = "The round screen of the Nest as a Q-SYS control surface: one comp
 [dependencies]
 qsys = { path = "../qsys" }
 serde_json = "1"
-font8x8 = { version = "0.3", default-features = false, features = ["unicode"] }
+fontdue = { version = "0.9", default-features = false, features = ["std"] }
 png = "0.17"
