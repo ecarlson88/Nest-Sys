@@ -520,3 +520,97 @@ fn names_controls_readably() {
     app.apply(&Change::from_json(&legend).unwrap());
     assert_eq!(app.screens[0].items.iter().find(|i| i.control.name == "toggle.1").unwrap().label, "Lights");
 }
+
+/// A text controller like tools/qsys/test_bed.lua's: a Level with its Mute.
+fn test_bed(extra: Vec<Control>) -> App {
+    let c = |v: Value| Control::from_json(&v).unwrap();
+    let mut controls = vec![
+        c(json!({"Name": "Lights", "Type": "Boolean", "Value": false, "Direction": "Read/Write"})),
+        c(json!({"Name": "Level", "Type": "Float", "Value": 0.0, "ValueMin": -100.0, "ValueMax": 20.0,
+                 "String": "0dB", "Direction": "Read/Write"})),
+        c(json!({"Name": "Mute", "Type": "Boolean", "Value": false, "Direction": "Read/Write"})),
+        c(json!({"Name": "Doorbell", "Type": "Trigger", "Value": 0.0, "Direction": "Read/Write"})),
+    ];
+    controls.extend(extra);
+    App::new(vec![Discovered {
+        component: Component { name: "NEST_Test_Bed".into(), kind: Some("device_controller_script".into()) },
+        controls,
+    }], PREFIX)
+}
+
+#[test]
+fn a_mute_folds_into_the_level_beside_it() {
+    let app = test_bed(Vec::new());
+    let s = app.current().unwrap();
+    let names: Vec<&str> = s.stops().iter().filter_map(|&i| s.items.get(i)).map(|i| i.control.name.as_str()).collect();
+    assert_eq!(names, ["Lights", "Level", "Doorbell"], "Mute is not a stop of its own");
+    let level = s.items.iter().find(|i| i.control.name == "Level").unwrap();
+    assert_eq!(level.mute.map(|m| s.items[m].control.name.as_str()), Some("Mute"));
+}
+
+#[test]
+fn a_level_turns_in_percent_mutes_with_a_click_and_closes_with_a_hold() {
+    let mut app = test_bed(Vec::new());
+    run(&mut app, &[Turn(1)]);
+    assert_eq!(focused(&app), "Level");
+    assert!(run(&mut app, &[Turn(1), Turn(-1)]).is_empty(), "browsing passes over it");
+    run(&mut app, &[Down, Up, Click]);
+    assert!(matches!(app.mode, Mode::Edit { .. }));
+    // 0 dB of -100..20 is 83%; a detent is 1%.
+    assert_eq!(run(&mut app, &[Turn(-1)]), [set("NEST_Test_Bed", "Level", json!(-1.6))]);
+    assert_eq!(run(&mut app, &[Down, Up, Click]), [set("NEST_Test_Bed", "Mute", json!(true))]);
+    assert!(matches!(app.mode, Mode::Edit { .. }), "a click mutes, and stays");
+    assert!(app.current().unwrap().level_muted(app.focus));
+    // Muted, a turn unmutes and leaves the level.
+    assert_eq!(run(&mut app, &[Turn(3)]), [set("NEST_Test_Bed", "Mute", json!(false))]);
+    assert_eq!(run(&mut app, &[Turn(3)]), [set("NEST_Test_Bed", "Level", json!(2.0))]);
+    run(&mut app, &[Down, Hold, Up]);
+    assert_eq!(app.mode, Mode::Browse, "a hold closes it");
+    run(&mut app, &[Turn(1)]);
+    assert_eq!(focused(&app), "Doorbell");
+}
+
+#[test]
+fn a_level_closes_after_five_quiet_seconds() {
+    let mut app = test_bed(Vec::new());
+    app.handle(Turn(1), 0);
+    app.handle(Click, 100);
+    assert!(app.tick(5_100));
+    assert_eq!(app.mode, Mode::Browse);
+}
+
+#[test]
+fn a_mute_folds_into_the_dial_named_level_among_several() {
+    let c = |v: Value| Control::from_json(&v).unwrap();
+    let mut app = test_bed(vec![c(json!({"Name": "Bass", "Type": "Float", "Value": 0.0, "ValueMin": -12.0,
+                                         "ValueMax": 12.0, "Direction": "Read/Write"}))]);
+    let s = app.current().unwrap();
+    let with_mute: Vec<&str> = s.items.iter().filter(|i| i.mute.is_some()).map(|i| i.control.name.as_str()).collect();
+    assert_eq!(with_mute, ["Level"]);
+    // Bass stays an ordinary dial.
+    let bass = s.items.iter().position(|i| i.control.name == "Bass").unwrap();
+    app.focus = bass;
+    app.handle(Click, 0);
+    assert!(app.handle(Click, 10).is_empty(), "a click closes an ordinary dial");
+    assert_eq!(app.mode, Mode::Browse);
+    let mut canvas = Canvas::new(FACE);
+    app.focus = 1;
+    for mode in [Mode::Browse, Mode::Edit { choice: 0 }] {
+        app.mode = mode;
+        render(&app, &mut canvas);
+    }
+}
+
+#[test]
+fn only_a_toggle_named_mute_folds() {
+    let c = |v: Value| Control::from_json(&v).unwrap();
+    let app = App::new(vec![Discovered {
+        component: Component { name: "NEST_X".into(), kind: Some("device_controller_script".into()) },
+        controls: vec![
+            c(json!({"Name": "Level", "Type": "Float", "Value": 0.0, "ValueMin": 0.0, "ValueMax": 1.0,
+                     "Direction": "Read/Write"})),
+            c(json!({"Name": "Muted", "Type": "Boolean", "Value": false, "Direction": "Read/Write"})),
+        ],
+    }], PREFIX);
+    assert!(app.current().unwrap().items.iter().all(|i| i.mute.is_none() && !i.folded));
+}

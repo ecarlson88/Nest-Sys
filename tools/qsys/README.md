@@ -105,6 +105,12 @@ wider, to put a thumb on, and each detent buzzes where the phone can.
   Controls list (one entry per component). A click on a control flips a toggle, fires a trigger, or opens
   a dial or combo box for editing. A momentary button is on while the click
   is down (holding it keeps it on rather than opening the list).
+- **A Level with its Mute:** a toggle named "Mute" in the same component
+  as a dial (the one named "Level" if there are several) folds into it. The
+  dial shows as a level in 0-100%, red when muted, and Mute is no stop of its
+  own. Click the level to adjust it: the ring sets the level (first
+  unmuting, if muted), a click mutes or unmutes, and a hold, or 5 s without
+  input, finishes.
 - **Editing:** the ring changes a dial's value as it turns (sent live). For a
   combo box it moves through the choices; a click picks one, a hold cancels.
   A click closes a dial. Editing also ends after 5 s without a turn or click
