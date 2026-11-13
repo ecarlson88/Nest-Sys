@@ -10,17 +10,27 @@
          justify-content: center; gap: 24px; background: #151515; color: #aaa;
          font: 14px/1.5 system-ui, sans-serif; }
   #ring { width: 520px; height: 520px; max-width: 92vw; max-height: 92vw; border-radius: 50%;
-          display: flex; align-items: center; justify-content: center; cursor: pointer;
+          display: flex; align-items: center; justify-content: center; cursor: grab;
           background: radial-gradient(circle, #8a8f94 60%, #50555a 100%); user-select: none;
+          -webkit-user-select: none; -webkit-touch-callout: none; touch-action: none;
           box-shadow: 0 10px 40px #000a; }
+  #face { cursor: pointer; }
+  .help { text-align: center; padding: 0 16px; }
+  .touch { display: none; }
   #ring.down { box-shadow: 0 4px 16px #000a; transform: scale(0.99); }
   #face { width: 92.3%; height: 92.3%; border-radius: 50%; background: #000; display: block; }
   kbd { background: #2a2a2a; border-radius: 4px; padding: 1px 6px; color: #ddd; }
+  /* On touch screens a wider ring, to put a thumb on. */
+  @media (pointer: coarse) {
+    .touch { display: block; } .mouse { display: none; }
+    #face { width: 76%; height: 76%; }
+  }
 </style>
 </head>
 <body>
 <div id="ring" tabindex="0"><canvas id="face" width="480" height="480" aria-label="The Nest's screen"></canvas></div>
-<div>Ring: mouse wheel or <kbd>←</kbd> <kbd>→</kbd> &nbsp; Click: mouse button or <kbd>Space</kbd> &nbsp; Hold the click for the Controls list</div>
+<div class="help mouse">Ring: mouse wheel, drag the grey ring, or <kbd>←</kbd> <kbd>→</kbd> &nbsp; Click: the face or <kbd>Space</kbd> &nbsp; Hold the click for the Controls list</div>
+<div class="help touch">Drag around the grey ring to turn it · tap the face to click · hold the face for the Controls list</div>
 <script>
 const ring = document.getElementById('ring');
 const face = document.getElementById('face');
@@ -35,8 +45,43 @@ ring.addEventListener('wheel', ev => {
   const steps = Math.trunc(wheel / 60);
   if (steps) { wheel -= steps * 60; send('turn', steps); }
 }, { passive: false });
-ring.addEventListener('mousedown', press);
-window.addEventListener('mouseup', release);
+// Pointers (mouse, touch, pen): on the face, the click; on the grey ring
+// around it, dragging turns it, a detent every DETENT degrees.
+const DETENT = 18;
+let drag = null;
+const centre = ev => {
+  const r = ring.getBoundingClientRect();
+  const dx = ev.clientX - (r.left + r.width / 2), dy = ev.clientY - (r.top + r.height / 2);
+  const faceR = face.getBoundingClientRect().width / 2;
+  return { angle: Math.atan2(dy, dx) * 180 / Math.PI, onFace: Math.hypot(dx, dy) < faceR };
+};
+ring.addEventListener('pointerdown', ev => {
+  if (ev.button > 0) return;
+  try { ring.setPointerCapture(ev.pointerId); } catch (e) {}
+  const at = centre(ev);
+  if (at.onFace) { press(); } else { drag = { last: at.angle, turned: 0 }; ring.style.cursor = 'grabbing'; }
+  ev.preventDefault();
+});
+ring.addEventListener('pointermove', ev => {
+  if (!drag) return;
+  const a = centre(ev).angle;
+  let d = a - drag.last;
+  if (d > 180) d -= 360;
+  if (d < -180) d += 360;
+  drag.last = a;
+  drag.turned += d;
+  // Screen angles grow clockwise, as the ring's detents count.
+  const steps = Math.trunc(drag.turned / DETENT);
+  if (steps) {
+    drag.turned -= steps * DETENT;
+    send('turn', steps);
+    if (navigator.vibrate) navigator.vibrate(4);
+  }
+});
+const end = () => { drag = null; ring.style.cursor = ''; release(); };
+ring.addEventListener('pointerup', end);
+ring.addEventListener('pointercancel', end);
+ring.addEventListener('contextmenu', ev => ev.preventDefault());
 window.addEventListener('keydown', ev => {
   if (ev.key === 'ArrowRight' || ev.key === 'ArrowDown') { send('turn', 1); ev.preventDefault(); }
   else if (ev.key === 'ArrowLeft' || ev.key === 'ArrowUp') { send('turn', -1); ev.preventDefault(); }
