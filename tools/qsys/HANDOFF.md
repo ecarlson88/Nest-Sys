@@ -1,5 +1,7 @@
 # Nest Gen 3 as a Q-SYS control surface — handoff
 
+> **New session? Start with [NEXT_SESSION.md](NEXT_SESSION.md)**: where things stand, Erik's decisions and the next steps. Parts of this file below are earlier notes; where they disagree with README.md or the code, those are current.
+
 Written 2026-11-12. Context for Claude Code working in the repo. Items are marked **[verified]** (read in docs/repos this session), **[from memory]** (recalled, not checked), or **[unknown]** (must be found out on hardware).
 
 ## Goal
