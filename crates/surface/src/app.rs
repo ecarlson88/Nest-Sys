@@ -24,6 +24,10 @@
 //! always sent. The list of components ("Controls" on screen): the ring
 //! moves and a click opens one. A trigger flashes for FLASH_MS when fired.
 //!
+//! The list of components ends with **Settings**: a list of its own (the
+//! ring moves, a click acts) with the helper text switch, the Network page
+//! and a way back to the list; a hold there also goes back to the list.
+//!
 //! Controls the Core reports Invisible or Disabled are not shown, and a
 //! component whose `bypass` is on is left out altogether, for as long as
 //! that lasts.
@@ -116,8 +120,48 @@ pub enum Mode {
     Browse,
     /// Editing the focused control; for a picker, `choice` is the one shown.
     Edit { choice: usize },
-    /// The list of components, with the one shown.
+    /// The list of components, with the one shown (SETTINGS for the
+    /// Settings entry at its end).
     Menu { focus: usize },
+    /// The Settings list, with the row shown (SETTINGS_ROWS).
+    Settings { focus: usize },
+    /// The network information page.
+    Network,
+}
+
+/// The Settings entry's place in Mode::Menu.
+pub const SETTINGS: usize = usize::MAX;
+
+/// The rows of the Settings list.
+pub const SETTINGS_ROWS: [&str; 3] = ["Helper text", "Network", "Back to Controls"];
+
+/// What the user chose in Settings, kept by the caller between runs.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Settings {
+    /// Whether the small "Click to ..." hints are shown.
+    pub hints: bool,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Settings { hints: true }
+    }
+}
+
+impl Settings {
+    /// From the JSON `to_json` wrote; missing or odd fields keep their
+    /// defaults.
+    pub fn from_json(v: &Value) -> Settings {
+        let mut s = Settings::default();
+        if let Some(h) = v.get("hints").and_then(Value::as_bool) {
+            s.hints = h;
+        }
+        s
+    }
+
+    pub fn to_json(&self) -> Value {
+        json!({"hints": self.hints})
+    }
 }
 
 /// A value to send to the Core.
@@ -141,6 +185,9 @@ pub struct App {
     pub last_input_ms: u64,
     /// A trigger just fired: (component, control, until when).
     pub flash: Option<(String, String, u64)>,
+    pub settings: Settings,
+    /// What the Network page shows, as (label, value), from the caller.
+    pub network: Vec<(String, String)>,
 }
 
 /// The title of a component's screen: its Code Name without the prefix,
@@ -269,7 +316,8 @@ fn screen_of(d: Discovered, prefix: &str) -> Option<Screen> {
 impl App {
     pub fn new(found: Vec<Discovered>, prefix: &str) -> App {
         let screens = found.into_iter().filter_map(|d| screen_of(d, prefix)).collect();
-        let mut app = App { screens, screen: 0, focus: 0, mode: Mode::Browse, pressed: None, last_input_ms: 0, flash: None };
+        let mut app = App { screens, screen: 0, focus: 0, mode: Mode::Browse, pressed: None, last_input_ms: 0, flash: None,
+            settings: Settings::default(), network: Vec::new() };
         app.settle();
         app
     }
@@ -294,6 +342,14 @@ impl App {
     pub fn on_components_stop(&self) -> bool {
         self.mode == Mode::Browse
             && self.current().is_some_and(|s| s.layout == Layout::Controls && self.focus == s.items.len())
+    }
+
+    /// The entries of the list of components: the shown screens' indices,
+    /// then SETTINGS.
+    pub fn menu_entries(&self) -> Vec<usize> {
+        let mut entries = self.shown_screens();
+        entries.push(SETTINGS);
+        entries
     }
 
     /// The screens that are shown, by index.
@@ -334,15 +390,17 @@ impl App {
     /// Core hid or bypassed what they were on.
     fn settle(&mut self) {
         let shown = self.shown_screens();
-        let Some(&first) = shown.first() else {
-            self.mode = Mode::Browse;
-            return;
-        };
         if let Mode::Menu { focus } = self.mode {
-            if !shown.contains(&focus) {
-                self.mode = Mode::Menu { focus: first };
+            if focus != SETTINGS && !shown.contains(&focus) {
+                self.mode = Mode::Menu { focus: shown.first().copied().unwrap_or(SETTINGS) };
             }
         }
+        let Some(&first) = shown.first() else {
+            if matches!(self.mode, Mode::Edit { .. }) {
+                self.mode = Mode::Browse;
+            }
+            return;
+        };
         if !shown.contains(&self.screen) {
             self.screen = first;
             self.focus = 0;
@@ -382,17 +440,15 @@ impl App {
                 _ => {}
             }
         }
-        if self.current().is_none() {
-            return Vec::new();
-        }
         match self.mode {
             Mode::Menu { focus } => {
-                let shown = self.shown_screens();
+                let entries = self.menu_entries();
                 match ev {
                     Event::Turn(n) => {
-                        let at = shown.iter().position(|&i| i == focus).unwrap_or(0);
-                        self.mode = Mode::Menu { focus: shown[wrap(at, n, shown.len())] };
+                        let at = entries.iter().position(|&i| i == focus).unwrap_or(0);
+                        self.mode = Mode::Menu { focus: entries[wrap(at, n, entries.len())] };
                     }
+                    Event::Click if focus == SETTINGS => self.mode = Mode::Settings { focus: 0 },
                     Event::Click => {
                         self.screen = focus;
                         self.focus = self.screens[focus].stops()[0];
@@ -400,8 +456,38 @@ impl App {
                     }
                     _ => {}
                 }
-                Vec::new()
+                return Vec::new();
             }
+            Mode::Settings { focus } => {
+                match ev {
+                    Event::Turn(n) => self.mode = Mode::Settings { focus: wrap(focus, n, SETTINGS_ROWS.len()) },
+                    Event::Click => match focus {
+                        0 => self.settings.hints = !self.settings.hints,
+                        1 => self.mode = Mode::Network,
+                        _ => self.mode = Mode::Menu { focus: SETTINGS },
+                    },
+                    Event::Hold => self.mode = Mode::Menu { focus: SETTINGS },
+                    _ => {}
+                }
+                return Vec::new();
+            }
+            Mode::Network => {
+                if matches!(ev, Event::Click | Event::Hold) {
+                    self.mode = Mode::Settings { focus: 1 };
+                }
+                return Vec::new();
+            }
+            _ => {}
+        }
+        if self.current().is_none() {
+            // Nothing to show but the list, whose Settings stay reachable.
+            if ev == Event::Hold {
+                self.mode = Mode::Menu { focus: SETTINGS };
+            }
+            return Vec::new();
+        }
+        match self.mode {
+            Mode::Menu { .. } | Mode::Settings { .. } | Mode::Network => Vec::new(),
             Mode::Edit { choice } => self.edit(ev, choice),
             Mode::Browse => match self.screens[self.screen].layout {
                 Layout::Volume { gain, mute } => self.volume(ev, gain, mute),

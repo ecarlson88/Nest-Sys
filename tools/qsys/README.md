@@ -107,6 +107,13 @@ Then open http://127.0.0.1:8480.
 - **Hold** on a screen is a shortcut to the Controls list. There, the ring
   moves and a click opens a component.
 
+- **Settings** ends the Controls list. Its rows: **Helper text** (click
+  switches the small "Click to ..." hints on or off), **Network** (the Core's
+  address, this unit's IP, the design and the Core's state; click to go
+  back) and **Back to Controls**. A hold also goes back. The simulator keeps
+  settings in `surface-settings.json` (`--settings PATH` to move it).
+  Screen timeout and brightness will join them once there is hardware.
+
 Controls the Core reports Invisible or Disabled are left off, and a
 component whose bypass is on disappears from the Nest until it goes off.
 

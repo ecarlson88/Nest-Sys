@@ -3,7 +3,7 @@
 
 use qsys::{Change, Component, Control, Discovered, Widget, PREFIX};
 use serde_json::{json, Value};
-use surface::app::{App, Layout, Mode, Set};
+use surface::app::{App, Layout, Mode, Set, Settings, SETTINGS};
 use surface::canvas::{Canvas, FACE};
 use surface::input::Event::{self, *};
 use surface::render::render;
@@ -266,6 +266,9 @@ fn the_list_of_components_opens_and_closes() {
     let mut app = design();
     run(&mut app, &[Down, Hold, Up]);
     assert_eq!(app.mode, Mode::Menu { focus: 0 });
+    // Back past the first is Settings, at the list's end; then Combo.
+    run(&mut app, &[Turn(-1)]);
+    assert_eq!(app.mode, Mode::Menu { focus: SETTINGS });
     run(&mut app, &[Turn(-1)]);
     assert_eq!(app.mode, Mode::Menu { focus: 2 });
     run(&mut app, &[Down, Hold, Up]);
@@ -397,4 +400,50 @@ fn nothing_shown_when_everything_is_hidden() {
     assert!(app.current().is_none());
     assert!(run(&mut app, &[Turn(1), Down, Up, Click]).is_empty());
     render(&app, &mut Canvas::new(FACE));
+}
+
+#[test]
+fn settings_close_the_list_and_switch_the_hints() {
+    let mut app = design();
+    run(&mut app, &[Down, Hold, Up]);
+    assert_eq!(*app.menu_entries().last().unwrap(), SETTINGS, "Settings ends the list");
+    run(&mut app, &[Turn(-1)]);
+    assert_eq!(app.mode, Mode::Menu { focus: SETTINGS });
+    run(&mut app, &[Down, Up, Click]);
+    assert_eq!(app.mode, Mode::Settings { focus: 0 });
+    assert!(app.settings.hints);
+    run(&mut app, &[Down, Up, Click]);
+    assert!(!app.settings.hints, "a click switches the helper text");
+    // Network, and back.
+    run(&mut app, &[Turn(1), Down, Up, Click]);
+    assert_eq!(app.mode, Mode::Network);
+    run(&mut app, &[Down, Up, Click]);
+    assert_eq!(app.mode, Mode::Settings { focus: 1 });
+    // The last row, and a hold, go back to the list.
+    run(&mut app, &[Turn(1), Down, Up, Click]);
+    assert_eq!(app.mode, Mode::Menu { focus: SETTINGS });
+    run(&mut app, &[Down, Up, Click, Down, Hold, Up]);
+    assert_eq!(app.mode, Mode::Menu { focus: SETTINGS });
+}
+
+#[test]
+fn settings_are_reachable_with_nothing_to_show() {
+    let mut app = App::new(Vec::new(), PREFIX);
+    assert!(app.current().is_none());
+    run(&mut app, &[Down, Hold, Up]);
+    assert_eq!(app.mode, Mode::Menu { focus: SETTINGS });
+    run(&mut app, &[Turn(1), Down, Up, Click]);
+    assert_eq!(app.mode, Mode::Settings { focus: 0 });
+    let mut canvas = Canvas::new(FACE);
+    for mode in [Mode::Menu { focus: SETTINGS }, Mode::Settings { focus: 2 }, Mode::Network] {
+        app.mode = mode;
+        render(&app, &mut canvas);
+    }
+}
+
+#[test]
+fn settings_survive_a_round_trip_through_json() {
+    let s = Settings { hints: false };
+    assert_eq!(Settings::from_json(&s.to_json()), s);
+    assert_eq!(Settings::from_json(&json!({})), Settings::default(), "missing fields keep defaults");
 }
