@@ -4,18 +4,24 @@ use qsys::{Control, Widget};
 use serde_json::Value;
 
 use crate::app::{App, Item, Layout, Mode, Screen};
-use crate::canvas::{Canvas, FACE};
+use crate::canvas::{mix, Canvas, Weight, FACE};
 
 const BG: u32 = 0x000000;
 const FG: u32 = 0xffffff;
-const DIM: u32 = 0x8c8c8c;
-const FAINT: u32 = 0x2e2e2e;
+const DIM: u32 = 0x9a9a9a;
+const DIM2: u32 = 0x4e4e4e;
+const TRACK: u32 = 0x2c2c2c;
 const ACCENT: u32 = 0x2fa8ff;
-const EDIT: u32 = 0xff8a1f;
+const EDIT: u32 = 0xff9a2e;
+const RED: u32 = 0xff453a;
 
-const C: i32 = FACE as i32 / 2;
-/// Text must stay inside the circle; this much width is safe mid-face.
-const WIDE: usize = 380;
+const C: f32 = FACE as f32 / 2.0;
+/// The edge arc of dials and the volume: its radius and width.
+const EDGE_R: f32 = 212.0;
+const EDGE_W: f32 = 26.0;
+/// It starts at the lower left and runs clockwise to the lower right.
+const EDGE_START: f32 = 135.0;
+const EDGE_SWEEP: f32 = 270.0;
 
 /// The value as shown: the Core's String, else the value itself.
 fn shown(c: &Control) -> String {
@@ -23,7 +29,7 @@ fn shown(c: &Control) -> String {
         return s.to_owned();
     }
     match &c.value {
-        Value::Bool(b) => if *b { "on" } else { "off" }.into(),
+        Value::Bool(b) => if *b { "On" } else { "Off" }.into(),
         Value::Number(n) => {
             let f = n.as_f64().unwrap_or(0.0);
             let s = format!("{f:.2}");
@@ -37,80 +43,81 @@ fn shown(c: &Control) -> String {
 pub fn render(app: &App, canvas: &mut Canvas) {
     canvas.clear(BG);
     match (app.current(), app.mode) {
-        (None, _) => {
-            canvas.text_centred(C, 200, "No NEST_", 3, WIDE, FG);
-            canvas.text_centred(C, 240, "components", 3, WIDE, FG);
-            canvas.text_centred(C, 300, "Code Name + Script Access", 1, WIDE, DIM);
-        }
+        (None, _) => status(canvas, "No controls", "Give components a NEST_ Code Name and Script Access External"),
         (Some(_), Mode::Menu { focus }) => menu(app, focus, canvas),
         (Some(screen), _) if matches!(screen.layout, Layout::Volume { .. }) => volume(screen, canvas),
         (Some(screen), mode) => {
-            canvas.text_centred(C, 58, &screen.title, 2, 300, DIM);
-            if let Some(item) = app.focused() {
-                canvas.text_centred(C, 96, &item.label, 3, WIDE, FG);
-                widget(item, mode, canvas);
-            } else if app.on_components_stop() {
-                canvas.text_centred(C, 96, "Components", 3, WIDE, FG);
-                canvas.disc(C, 250, 62.0, 54.0, ACCENT);
-                // A left-pointing arrowhead: back to the list.
-                for row in 0..41 {
-                    let half = 20 - (row - 20i32).abs();
-                    canvas.fill_rect(C - 14 + (20 - half), 230 + row, half + 4, 1, FG);
-                }
-                hint(canvas, "click for the list of components");
+            match app.focused() {
+                Some(item) => control(app, screen, item, mode, canvas),
+                None => controls_stop(screen, canvas),
             }
-            let stops = screen.stops();
-            dots(stops.iter().position(|&i| i == app.focus).unwrap_or(0), stops.len(), canvas);
+            // A picker's wheel of choices has the bottom to itself.
+            if !matches!((mode, app.focused().map(|i| &i.widget)), (Mode::Edit { .. }, Some(Widget::Picker { .. }))) {
+                let stops = screen.stops();
+                dots(stops.iter().position(|&i| i == app.focus).unwrap_or(0), stops.len(), canvas);
+            }
         }
     }
     canvas.mask_round();
 }
 
+/// A whole-face message (no controls, connecting, ...).
+pub fn status(canvas: &mut Canvas, title: &str, detail: &str) {
+    canvas.clear(BG);
+    canvas.text_centred(C, 200.0, title, 40.0, Weight::Bold, 380.0, FG);
+    let lines = canvas.fonts.wrap(detail, 22.0, Weight::Regular, 320.0, 3);
+    for (i, line) in lines.iter().enumerate() {
+        canvas.text_centred(C, 262.0 + 32.0 * i as f32, line, 22.0, Weight::Regular, 340.0, DIM);
+    }
+    canvas.mask_round();
+}
+
+fn header(canvas: &mut Canvas, title: &str, label: &str) {
+    canvas.text_centred(C, 80.0, title, 22.0, Weight::Regular, 260.0, DIM);
+    canvas.text_centred(C, 128.0, label, 38.0, Weight::Bold, 360.0, FG);
+}
+
+fn hint(canvas: &mut Canvas, y: f32, text: &str) {
+    canvas.text_centred(C, y, text, 19.0, Weight::Regular, 300.0, DIM);
+}
+
+/// The list of components, as a wheel of names around the one shown.
 fn menu(app: &App, focus: usize, canvas: &mut Canvas) {
-    canvas.text_centred(C, 58, "Components", 2, 300, DIM);
+    canvas.text_centred(C, 58.0, "Controls", 20.0, Weight::Regular, 200.0, DIM);
     let shown = app.shown_screens();
     let n = shown.len();
     let at = shown.iter().position(|&i| i == focus).unwrap_or(0);
-    if n > 1 {
-        canvas.text_centred(C, 168, &app.screens[shown[(at + n - 1) % n]].title, 2, WIDE, DIM);
+    canvas.line(90.0, 240.0, 390.0, 240.0, 78.0, TRACK);
+    canvas.text_centred(C, 240.0, &app.screens[focus].title, 40.0, Weight::Bold, 320.0, FG);
+    for (offset, i) in neighbours(n, at) {
+        let title = app.screens[shown[i]].title.clone();
+        wheel_row(canvas, offset, &title);
     }
-    canvas.fill_rect(70, 214, 340, 52, FAINT);
-    canvas.text_centred(C, 228, &app.screens[focus].title, 3, 330, FG);
-    if n > 2 {
-        canvas.text_centred(C, 296, &app.screens[shown[(at + 1) % n]].title, 2, WIDE, DIM);
-    }
-    canvas.text_centred(C, 380, "click opens, hold goes back", 1, WIDE, DIM);
     dots(at, n, canvas);
 }
 
-/// A gain component: its level on a dial, its mute by a click.
-fn volume(screen: &Screen, canvas: &mut Canvas) {
-    let Layout::Volume { gain, mute } = screen.layout else { return };
-    let c = &screen.items[gain].control;
-    let muted = screen.muted();
-    canvas.text_centred(C, 70, &screen.title, 3, 300, FG);
-    let (min, max) = c.range().unwrap_or((0.0, 1.0));
-    let v = c.value.as_f64().unwrap_or(min);
-    let f = ((v - min) / (max - min)).clamp(0.0, 1.0) as f32;
-    canvas.arc(C, 252, 150.0, 132.0, 135.0, 270.0, FAINT);
-    if f > 0.0 {
-        canvas.arc(C, 252, 150.0, 132.0, 135.0, 270.0 * f, if muted { DIM } else { ACCENT });
+/// The rows around the one at `at` of n in a wheel, as (offset, index):
+/// up to two each way, each index once, the nearest first.
+fn neighbours(n: usize, at: usize) -> Vec<(i32, usize)> {
+    let mut used = vec![at];
+    let mut rows = Vec::new();
+    for offset in [1i32, -1, 2, -2] {
+        if n == 0 {
+            break;
+        }
+        let i = (at as i64 + offset as i64).rem_euclid(n as i64) as usize;
+        if !used.contains(&i) {
+            used.push(i);
+            rows.push((offset, i));
+        }
     }
-    canvas.text_centred(C, 222, &shown(c), 4, 230, if muted { DIM } else { FG });
-    if muted {
-        canvas.text_centred(C, 272, "MUTED", 3, 230, EDIT);
-    }
-    let lo = c.string_min.clone().unwrap_or_else(|| min.to_string());
-    let hi = c.string_max.clone().unwrap_or_else(|| max.to_string());
-    canvas.text_centred(C - 104, 380, &lo, 1, 90, DIM);
-    canvas.text_centred(C + 104, 380, &hi, 1, 90, DIM);
-    let hint_text = match mute.filter(|&m| screen.items[m].shown()) {
-        Some(_) if muted => "turn for level, click to unmute",
-        Some(_) => "turn for level, click to mute",
-        None => "turn for level",
-    };
-    hint(canvas, hint_text);
-    canvas.text_centred(C, 418, "hold for components", 1, 300, DIM);
+    rows
+}
+
+/// A row of a wheel: further from the middle is smaller and fainter.
+fn wheel_row(canvas: &mut Canvas, offset: i32, text: &str) {
+    let (dy, size, rgb) = if offset.abs() == 1 { (74.0, 28.0, DIM) } else { (134.0, 22.0, DIM2) };
+    canvas.text_centred(C, 240.0 + dy * offset.signum() as f32, text, size, Weight::Regular, 300.0, rgb);
 }
 
 /// Where the focus is among n: dots, or "i / n" when they would not fit.
@@ -119,92 +126,165 @@ fn dots(i: usize, n: usize, canvas: &mut Canvas) {
         return;
     }
     if n > 14 {
-        canvas.text_centred(C, 420, &format!("{} / {}", i + 1, n), 2, WIDE, DIM);
+        canvas.text_centred(C, 446.0, &format!("{} / {}", i + 1, n), 18.0, Weight::Regular, 200.0, DIM);
         return;
     }
-    let gap = 16;
-    let left = C - (gap * (n as i32 - 1)) / 2;
+    let gap = 15.0;
+    let left = C - gap * (n as f32 - 1.0) / 2.0;
     for k in 0..n {
-        let (r, rgb) = if k == i { (5.0, ACCENT) } else { (3.5, DIM) };
-        canvas.disc(left + gap * k as i32, 428, r, 0.0, rgb);
+        let (r, rgb) = if k == i { (4.5, FG) } else { (3.0, DIM2) };
+        canvas.disc(left + gap * k as f32, 446.0, r, rgb);
     }
 }
 
-fn widget(item: &Item, mode: Mode, canvas: &mut Canvas) {
+/// The track and fill of a dial or the volume around the face's edge.
+fn edge(canvas: &mut Canvas, fraction: f32, rgb: u32, knob: bool) {
+    canvas.arc(C, C, EDGE_R, EDGE_W, EDGE_START, EDGE_SWEEP, TRACK);
+    let f = fraction.clamp(0.0, 1.0);
+    if f > 0.0 {
+        canvas.arc(C, C, EDGE_R, EDGE_W, EDGE_START, EDGE_SWEEP * f, rgb);
+    }
+    if knob {
+        let a = (EDGE_START + EDGE_SWEEP * f).to_radians();
+        canvas.disc(C + EDGE_R * a.cos(), C + EDGE_R * a.sin(), EDGE_W / 2.0 + 4.0, FG);
+    }
+}
+
+fn range_labels(canvas: &mut Canvas, c: &Control, min: f64, max: f64) {
+    let lo = c.string_min.clone().unwrap_or_else(|| min.to_string());
+    let hi = c.string_max.clone().unwrap_or_else(|| max.to_string());
+    canvas.text_centred(C - 92.0, 420.0, &lo, 18.0, Weight::Regular, 110.0, DIM);
+    canvas.text_centred(C + 92.0, 420.0, &hi, 18.0, Weight::Regular, 110.0, DIM);
+}
+
+fn fraction(c: &Control, min: f64, max: f64) -> f32 {
+    ((c.value.as_f64().unwrap_or(min) - min) / (max - min)) as f32
+}
+
+/// A gain component: its level around the edge, its mute by a click.
+fn volume(screen: &Screen, canvas: &mut Canvas) {
+    let Layout::Volume { gain, mute } = screen.layout else { return };
+    let c = &screen.items[gain].control;
+    let muted = screen.muted();
+    let (min, max) = c.range().unwrap_or((0.0, 1.0));
+    edge(canvas, fraction(c, min, max), if muted { RED } else { ACCENT }, !muted);
+    canvas.text_centred(C, 150.0, &screen.title, 34.0, Weight::Bold, 300.0, FG);
+    canvas.text_centred(C, 246.0, &shown(c), 84.0, Weight::Light, 320.0, if muted { DIM } else { FG });
+    if muted {
+        canvas.text_centred(C, 326.0, "Muted", 30.0, Weight::Bold, 200.0, RED);
+        hint(canvas, 368.0, "Turn to unmute");
+    } else if mute.is_some_and(|m| screen.items[m].shown()) {
+        hint(canvas, 340.0, "Click to mute");
+    }
+    range_labels(canvas, c, min, max);
+}
+
+fn control(app: &App, screen: &Screen, item: &Item, mode: Mode, canvas: &mut Canvas) {
     let c = &item.control;
     let editing = matches!(mode, Mode::Edit { .. });
-    let accent = if editing { EDIT } else { ACCENT };
     match &item.widget {
         Widget::Dial { min, max } | Widget::Meter { min, max } => {
             let meter = matches!(item.widget, Widget::Meter { .. });
-            let v = c.value.as_f64().unwrap_or(*min);
-            let f = ((v - min) / (max - min)).clamp(0.0, 1.0) as f32;
-            let (outer, inner) = if meter { (128.0, 120.0) } else { (130.0, 114.0) };
-            canvas.arc(C, 262, outer, inner, 135.0, 270.0, FAINT);
-            if f > 0.0 {
-                canvas.arc(C, 262, outer, inner, 135.0, 270.0 * f, if meter { FG } else { accent });
-            }
-            canvas.text_centred(C, 236, &shown(c), 4, 220, FG);
-            let lo = c.string_min.clone().unwrap_or_else(|| min.to_string());
-            let hi = c.string_max.clone().unwrap_or_else(|| max.to_string());
-            canvas.text_centred(C - 92, 372, &lo, 1, 90, DIM);
-            canvas.text_centred(C + 92, 372, &hi, 1, 90, DIM);
+            let rgb = if meter { FG } else if editing { EDIT } else { ACCENT };
+            edge(canvas, fraction(c, *min, *max), rgb, !meter);
+            canvas.text_centred(C, 108.0, &screen.title, 20.0, Weight::Regular, 220.0, DIM);
+            canvas.text_centred(C, 150.0, &item.label, 32.0, Weight::Bold, 300.0, FG);
+            canvas.text_centred(C, 250.0, &shown(c), 80.0, Weight::Light, 320.0, if editing { EDIT } else { FG });
             if !meter {
-                hint(canvas, if editing { "turn to adjust, click when done" } else { "click to adjust" });
+                hint(canvas, 336.0, if editing { "Turn to adjust · click when done" } else { "Click to adjust" });
             }
+            range_labels(canvas, c, *min, *max);
         }
         Widget::NumberEntry => {
-            canvas.text_centred(C, 236, &shown(c), 4, WIDE, if editing { EDIT } else { FG });
-            hint(canvas, if editing { "turn to change, click when done" } else { "click to change" });
+            header(canvas, &screen.title, &item.label);
+            canvas.text_centred(C, 262.0, &shown(c), 80.0, Weight::Light, 360.0, if editing { EDIT } else { FG });
+            hint(canvas, 400.0, if editing { "Turn to change · click when done" } else { "Click to change" });
         }
-        Widget::Toggle | Widget::Indicator | Widget::Momentary => {
+        Widget::Toggle => {
+            header(canvas, &screen.title, &item.label);
             let on = c.is_on();
-            if on {
-                canvas.disc(C, 250, 62.0, 0.0, accent);
-            } else {
-                canvas.disc(C, 250, 62.0, 52.0, FAINT);
-            }
-            canvas.text_centred(C, 336, &shown(c), 2, WIDE, if on { FG } else { DIM });
-            match item.widget {
-                Widget::Toggle => hint(canvas, "click to switch"),
-                Widget::Momentary => hint(canvas, "on while the click is down"),
-                _ => {}
-            }
+            let (x0, x1) = (C - 38.0, C + 38.0);
+            canvas.line(x0, 262.0, x1, 262.0, 76.0, if on { ACCENT } else { TRACK });
+            canvas.disc(if on { x1 } else { x0 }, 262.0, 30.0, if on { FG } else { DIM });
+            canvas.text_centred(C, 352.0, &shown(c), 28.0, Weight::Regular, 300.0, if on { FG } else { DIM });
+            hint(canvas, 400.0, "Click to switch");
         }
-        Widget::Button => {
-            canvas.disc(C, 250, 62.0, 54.0, ACCENT);
-            canvas.text_centred(C, 242, "PRESS", 2, 120, FG);
-            hint(canvas, "click to fire");
+        Widget::Indicator => {
+            header(canvas, &screen.title, &item.label);
+            if c.is_on() {
+                canvas.ring(C, 262.0, 62.0, 10.0, mix(BG, ACCENT, 0.35));
+                canvas.disc(C, 262.0, 48.0, ACCENT);
+            } else {
+                canvas.disc(C, 262.0, 48.0, 0x161616);
+                canvas.ring(C, 262.0, 48.0, 4.0, TRACK);
+            }
+            canvas.text_centred(C, 360.0, &shown(c), 28.0, Weight::Regular, 300.0, if c.is_on() { FG } else { DIM });
+        }
+        Widget::Momentary | Widget::Button => {
+            header(canvas, &screen.title, &item.label);
+            let momentary = item.widget == Widget::Momentary;
+            let lit = if momentary {
+                c.is_on()
+            } else {
+                app.flash.as_ref().is_some_and(|(comp, name, _)| *comp == screen.component.name && *name == c.name)
+            };
+            if lit {
+                canvas.disc(C, 266.0, 80.0, ACCENT);
+            } else {
+                canvas.ring(C, 266.0, 77.0, 6.0, ACCENT);
+            }
+            let word = if momentary { "Hold" } else { "Press" };
+            canvas.text_centred(C, 266.0, word, 30.0, Weight::Bold, 140.0, FG);
+            hint(canvas, 392.0, if momentary { "On while held" } else { "Click to fire" });
         }
         Widget::Picker { choices } => match mode {
-            Mode::Edit { choice } if !choices.is_empty() => {
-                let n = choices.len();
-                if n > 1 {
-                    canvas.text_centred(C, 176, &choices[(choice + n - 1) % n], 2, WIDE, DIM);
-                }
-                canvas.fill_rect(70, 222, 340, 52, FAINT);
-                canvas.text_centred(C, 236, &choices[choice], 3, 330, EDIT);
-                if n > 2 {
-                    canvas.text_centred(C, 304, &choices[(choice + 1) % n], 2, WIDE, DIM);
-                }
-                hint(canvas, "click picks, hold cancels");
-            }
+            Mode::Edit { choice } if !choices.is_empty() => picker_wheel(canvas, &item.label, choices, choice),
             _ => {
-                canvas.text_centred(C, 236, &shown(c), 3, WIDE, FG);
-                hint(canvas, &format!("click to choose ({})", choices.len()));
+                header(canvas, &screen.title, &item.label);
+                canvas.text_centred(C, 256.0, &shown(c), 44.0, Weight::Bold, 360.0, FG);
+                let at = choices.iter().position(|ch| Some(ch.as_str()) == c.string.as_deref());
+                if let Some(at) = at {
+                    let pos = format!("{} of {}", at + 1, choices.len());
+                    canvas.text_centred(C, 306.0, &pos, 20.0, Weight::Regular, 200.0, DIM);
+                }
+                hint(canvas, 392.0, "Click to choose");
             }
         },
         Widget::TextEntry | Widget::Label | Widget::Hidden => {
+            header(canvas, &screen.title, &item.label);
             let text = shown(c);
             if text.is_empty() {
-                canvas.text_centred(C, 240, "(empty)", 2, WIDE, DIM);
+                canvas.text_centred(C, 262.0, "Empty", 28.0, Weight::Regular, 300.0, DIM2);
             } else {
-                canvas.text_centred(C, 236, &text, 3, WIDE, FG);
+                let lines = canvas.fonts.wrap(&text, 34.0, Weight::Regular, 340.0, 3);
+                let top = 262.0 - 22.0 * (lines.len() as f32 - 1.0);
+                for (i, line) in lines.iter().enumerate() {
+                    canvas.text_centred(C, top + 44.0 * i as f32, line, 34.0, Weight::Regular, 360.0, FG);
+                }
             }
         }
     }
 }
 
-fn hint(canvas: &mut Canvas, text: &str) {
-    canvas.text_centred(C, 396, text, 1, 300, DIM);
+/// A combo box being chosen from: the choices as a wheel around the one
+/// that a click would pick.
+fn picker_wheel(canvas: &mut Canvas, label: &str, choices: &[String], choice: usize) {
+    let n = choices.len();
+    canvas.text_centred(C, 70.0, label, 22.0, Weight::Regular, 260.0, DIM);
+    canvas.line(90.0, 240.0, 390.0, 240.0, 78.0, mix(BG, EDIT, 0.22));
+    canvas.text_centred(C, 240.0, &choices[choice], 40.0, Weight::Bold, 320.0, EDIT);
+    for (offset, i) in neighbours(n, choice) {
+        wheel_row(canvas, offset, &choices[i]);
+    }
+    canvas.text_centred(C, 430.0, "Click picks · hold cancels", 17.0, Weight::Regular, 260.0, DIM);
+}
+
+/// The stop after a screen's last control: back to the list.
+fn controls_stop(screen: &Screen, canvas: &mut Canvas) {
+    header(canvas, &screen.title, "Controls");
+    canvas.ring(C, 266.0, 77.0, 6.0, ACCENT);
+    // A chevron pointing left.
+    canvas.line(C + 10.0, 236.0, C - 18.0, 266.0, 10.0, FG);
+    canvas.line(C - 18.0, 266.0, C + 10.0, 296.0, 10.0, FG);
+    hint(canvas, 392.0, "Click for all controls");
 }
