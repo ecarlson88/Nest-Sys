@@ -301,7 +301,7 @@ fn drum(canvas: &mut Canvas, rows: &[String], pos: f32, pill: u32, rgb: u32) {
         let (sin, cos) = theta.sin_cos();
         let y = C + DRUM_R * sin;
         // Smaller and fainter as it turns away; the middle row in rgb.
-        let size = (40.0 * (0.3 + 0.7 * cos.powi(3)) * 2.0).round() / 2.0;
+        let size = (40.0 * (0.22 + 0.78 * cos.powi(6)) * 2.0).round() / 2.0;
         let faded = mix(BG, DIM, cos * cos);
         let colour = mix(faded, rgb, (1.0 - o.abs()).clamp(0.0, 1.0));
         let half_chord = (C * C - (y - C) * (y - C)).max(0.0).sqrt();
