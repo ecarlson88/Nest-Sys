@@ -11,13 +11,14 @@ the code (its early "Widget mapping (v1)" table, say), the latter are current.
 
 - Branch **`ccr-deb37764-czgzbi`** of `ecarlson88/Nest-Sys` (a fork of
   `unfr0zen/unfr0zen`). 31 commits on top of the fork's `main` (`8e095b3`), all
-  pushed. No `upstream` remote is set up yet.
+  pushed. No `upstream` remote is set up yet. The second session carried
+  on from it in branch **`claude/magical-edison-6wrezw`**.
   **Not merged, no pull request: Erik does not want either yet.** Do not open
   one or touch `main` unless asked.
 - No hardware yet; Erik expects a used Nest Gen 3 within days. Everything so
   far was tested against **Q-SYS Designer's emulation** (by Erik, on Windows)
   and against mocks here. Nothing has run on a Nest.
-- Tests: `cargo test -p qsys -p surface` (79 tests) and
+- Tests: `cargo test -p qsys -p surface` (81 tests) and
   `cargo clippy -p qsys -p surface --locked --all-targets -- -D warnings`,
   both clean. They also pass as 32-bit ARM under `qemu-arm` (below).
 
@@ -100,11 +101,8 @@ the code (its early "Widget mapping (v1)" table, say), the latter are current.
 
 ## Next, before hardware (agreed list, not started)
 
-1. **`nest-surface --diag`**: print the framebuffer (size, bits a pixel,
-   channel offsets, pages, stride) and the input devices; draw an orientation
-   pattern (an up arrow, colour bars, the face's round edge) through the real
-   panel path; show and log each ring detent (with direction) and click.
-   First thing to run on the unit.
+1. ~~**`nest-surface --diag`**~~: done (`src/diag.rs`, README.md "On the
+   unit"). First thing to run on the unit.
 2. **Connect off the loop**: `Runner::try_connect` blocks up to 3 s
    (`Client::connect` timeout) and discovery more; on the unit that freezes
    the ring. Move connecting to a thread and hand the session back; keep
@@ -131,8 +129,8 @@ the code (its early "Widget mapping (v1)" table, say), the latter are current.
    who manages Wi-Fi, any watchdog, `/sys/class/backlight`, `/dev/fb0` and
    `/dev/input`. A NAND backup can also be unpacked offline (UBIFS root) to read
    the same; findings, in our own words, go in `HANDOFF.md`.
-4. `--diag`, then `install-unit.sh` and `nest-surface.sh`: face upright and
-   round, ring direction, frame rate, the hand-over (note `keeper.pid` is
+4. `install-unit.sh`, `nest-surface.sh --diag`, then `nest-surface.sh`:
+   face upright and round, ring direction, frame rate, the hand-over (note `keeper.pid` is
    written only after nlclient's first bucket commit or a click on its
    UNFR0ZEN screen), and whether the unit suspends.
 5. Then Settings that need hardware, starting at boot, and the stock vs
