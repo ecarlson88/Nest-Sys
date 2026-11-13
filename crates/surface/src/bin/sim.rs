@@ -12,60 +12,38 @@
 //! leaving emulation, say), it shows "Connecting…" and tries again every
 //! two seconds, discovering the design afresh when it is back.
 
-use std::collections::BTreeMap;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::process::ExitCode;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
-use qsys::{Client, Qrc, Transport, DEFAULT_PORT, PREFIX};
-use serde_json::Value;
-use chrono::{Datelike, Timelike};
-use surface::app::{App, Clock, Set, Settings};
-use surface::canvas::{Canvas, FACE};
-use surface::input::{Button, Event};
-use surface::render::{status, Renderer};
+use surface::runner::{Config, Input, Runner};
 
 const PAGE: &str = include_str!("sim.html");
-const POLL_EVERY: Duration = Duration::from_millis(200);
-const NOOP_EVERY: Duration = Duration::from_secs(20);
 
 struct Args {
-    host: String,
-    port: u16,
-    user: Option<String>,
-    password: String,
-    prefix: String,
+    config: Config,
     listen: String,
-    settings: String,
 }
 
 fn parse() -> Result<Args, String> {
-    let mut a = Args {
-        host: String::new(),
-        port: DEFAULT_PORT,
-        user: None,
-        password: String::new(),
-        prefix: PREFIX.into(),
-        listen: "127.0.0.1:8480".into(),
-        settings: "surface-settings.json".into(),
-    };
+    let mut a = Args { config: Config::new("", "surface-settings.json"), listen: "127.0.0.1:8480".into() };
     let mut it = std::env::args().skip(1);
     while let Some(arg) = it.next() {
         let mut value = || it.next().ok_or(format!("{arg} needs a value"));
+        if a.config.option(&arg, &mut value)? {
+            continue;
+        }
         match arg.as_str() {
-            "--port" => a.port = value()?.parse().map_err(|e| format!("--port: {e}"))?,
-            "--user" => a.user = Some(value()?),
-            "--password" => a.password = value()?,
-            "--prefix" => a.prefix = value()?,
             "--listen" => a.listen = value()?,
-            "--settings" => a.settings = value()?,
             s if s.starts_with('-') => return Err(format!("unknown option {s}")),
-            s => a.host = s.into(),
+            s => a.config.host = s.into(),
         }
     }
-    if a.host.is_empty() {
-        return Err("usage: sim CORE_HOST [--port N] [--user U --password P] [--prefix P] [--listen ADDR]".into());
+    if a.config.host.is_empty() {
+        return Err("usage: sim CORE_HOST [--port N] [--user U --password P] [--prefix P] [--listen ADDR] \
+                    [--settings FILE]"
+            .into());
     }
     Ok(a)
 }
@@ -122,150 +100,14 @@ fn respond_frame(stream: &mut TcpStream, version: u64, png: &[u8]) {
     let _ = stream.write_all(png);
 }
 
-fn now_ms(start: Instant) -> u64 {
-    start.elapsed().as_millis() as u64
-}
-
-/// A connection to the Core and the screen built from what it reported.
-struct Session {
-    q: Qrc<TcpStream>,
-    app: App,
-    /// The Core's last EngineStatus params (design name, state, ...).
-    engine: Value,
-}
-
-/// What the Network page shows.
-fn network_rows(a: &Args, s: &Session) -> Vec<(String, String)> {
-    let mut rows = vec![("Core".to_owned(), format!("{}:{}", a.host, a.port))];
-    if let Ok(local) = s.q.client.get_ref().local_addr() {
-        rows.push(("This unit".into(), local.ip().to_string()));
-    }
-    if let Some(design) = s.engine.get("DesignName").and_then(Value::as_str) {
-        let emulated = s.engine.get("IsEmulator").and_then(Value::as_bool) == Some(true);
-        rows.push(("Design".into(), if emulated { format!("{design} (emulated)") } else { design.to_owned() }));
-    }
-    if let Some(state) = s.engine.get("State").and_then(Value::as_str) {
-        rows.push(("Core state".into(), state.to_owned()));
-    }
-    rows
-}
-
-/// Takes the Core's unasked messages, keeping its EngineStatus; returns
-/// whether that changed.
-fn take_engine_status(s: &mut Session) -> bool {
-    let mut changed = false;
-    for m in s.q.client.take_notifications() {
-        if m.get("method").and_then(Value::as_str) == Some("EngineStatus") {
-            s.engine = m.get("params").cloned().unwrap_or(Value::Null);
-            changed = true;
-        }
-    }
-    changed
-}
-
-/// The local time as the home screen shows it.
-fn clock_now() -> Clock {
-    let now = chrono::Local::now();
-    Clock {
-        hour: now.hour(),
-        minute: now.minute(),
-        date: format!("{} {} {}", now.format("%A"), now.day(), now.format("%B")),
-    }
-}
-
-fn load_settings(path: &str) -> Settings {
-    std::fs::read(path)
-        .ok()
-        .and_then(|b| serde_json::from_slice::<Value>(&b).ok())
-        .map_or_else(Settings::default, |v| Settings::from_json(&v))
-}
-
-fn save_settings(path: &str, settings: &Settings) {
-    let text = serde_json::to_string_pretty(&settings.to_json()).unwrap_or_default();
-    if let Err(e) = std::fs::write(path, text + "\n") {
-        eprintln!("{path}: {e}");
-    }
-}
-
-/// Connects, discovers the design and follows its controls.
-fn connect(a: &Args) -> qsys::Result<Session> {
-    let mut q = Qrc::new(Client::connect(&a.host, a.port, Duration::from_secs(3))?);
-    if let Some(user) = &a.user {
-        q.client.logon(user, &a.password)?;
-    }
-    let app = App::new(q.list(&a.prefix)?, &a.prefix);
-    for (component, controls) in app.watched() {
-        let names: Vec<&str> = controls.iter().map(String::as_str).collect();
-        q.subscribe(&component, &names)?;
-    }
-    let mut s = Session { q, app, engine: Value::Null };
-    take_engine_status(&mut s);
-    s.app.network = network_rows(a, &s);
-    Ok(s)
-}
-
-/// Whether an error means the connection is gone (rather than the Core
-/// refusing one request).
-fn lost(e: &qsys::Error) -> bool {
-    !matches!(e, qsys::Error::Rpc { .. })
-}
-
-/// One round with the Core: the inputs, the values to send, the changes.
-fn exchange(s: &mut Session, events: Vec<Event>, t: u64, poll: bool, noop: bool) -> qsys::Result<bool> {
-    let mut dirty = s.app.tick(t);
-    // A dial's turns are sent as one value per round of the loop.
-    let mut sets: BTreeMap<(String, String), Set> = BTreeMap::new();
-    for ev in events {
-        for set in s.app.handle(ev, t) {
-            sets.insert((set.component.clone(), set.control.clone()), set);
-        }
-        dirty = true;
-    }
-    for set in sets.into_values() {
-        if let Err(e) = s.q.set(&set.component, &set.control, set.value) {
-            if lost(&e) {
-                return Err(e);
-            }
-            eprintln!("{}.{}: {e}", set.component, set.control);
-        }
-    }
-    if poll {
-        for change in s.q.poll()? {
-            s.app.apply(&change);
-            dirty = true;
-        }
-    }
-    if noop {
-        s.q.client.noop()?;
-    }
-    Ok(dirty)
-}
-
-const RETRY_EVERY: Duration = Duration::from_secs(2);
-
 fn run(a: Args) -> std::io::Result<()> {
     let listener = TcpListener::bind(&a.listen)?;
     listener.set_nonblocking(true)?;
     println!("open http://{}", a.listen);
-    let start = Instant::now();
-    let mut button = Button::default();
-    let mut canvas = Canvas::new(FACE);
-    let mut renderer = Renderer::new();
-    let mut saved = load_settings(&a.settings);
-    let mut animating = false;
+    let mut runner = Runner::new(a.config);
     let mut frame = Vec::new();
     let mut version = 0u64;
-    let mut dirty = true;
-    let mut session: Option<Session> = None;
-    // The screen to come back to after a reconnect, by component.
-    let mut last_screen: Option<String> = None;
-    let mut next_try = Instant::now();
-    let mut trouble = String::from("Starting");
-    let mut last_poll = Instant::now();
-    let mut last_noop = Instant::now();
-
     loop {
-        let mut events = Vec::new();
         while let Ok((mut stream, _)) = listener.accept() {
             let _ = stream.set_nonblocking(false);
             match read_request(&mut stream) {
@@ -275,11 +117,10 @@ fn run(a: Args) -> std::io::Result<()> {
                 }
                 Some(Request::Frame(_)) => respond_frame(&mut stream, version, &frame),
                 Some(Request::Input(e, n)) => {
-                    let t = now_ms(start);
                     match e.as_str() {
-                        "turn" => events.push(Event::Turn(n)),
-                        "down" => events.extend(button.down(t)),
-                        "up" => events.extend(button.up(t)),
+                        "turn" => runner.input(Input::Turn(n)),
+                        "down" => runner.input(Input::Down),
+                        "up" => runner.input(Input::Up),
                         _ => {}
                     }
                     respond(&mut stream, "204 No Content", "text/plain", b"");
@@ -287,84 +128,9 @@ fn run(a: Args) -> std::io::Result<()> {
                 _ => respond(&mut stream, "404 Not Found", "text/plain", b"not found"),
             }
         }
-        let t = now_ms(start);
-        events.extend(button.tick(t));
-
-        if session.is_none() && Instant::now() >= next_try {
-            match connect(&a) {
-                Ok(mut s) => {
-                    println!("connected to {}:{}: {} screens", a.host, a.port, s.app.screens.len());
-                    s.app.settings = saved.clone();
-                    if let Some(name) = &last_screen {
-                        if let Some(i) = s.app.screens.iter().position(|sc| &sc.component.name == name) {
-                            s.app.screen = i;
-                            s.app.focus = s.app.screens[i].stops()[0];
-                        }
-                    }
-                    session = Some(s);
-                    last_poll = Instant::now() - POLL_EVERY;
-                    last_noop = Instant::now();
-                }
-                Err(e) => {
-                    let why = e.to_string();
-                    if why != trouble {
-                        eprintln!("cannot reach {}:{}: {why}; trying again every {}s", a.host, a.port, RETRY_EVERY.as_secs());
-                        trouble = why;
-                    }
-                    next_try = Instant::now() + RETRY_EVERY;
-                }
-            }
-            dirty = true;
-        }
-
-        if let Some(s) = &mut session {
-            let poll = last_poll.elapsed() >= POLL_EVERY;
-            let noop = last_noop.elapsed() >= NOOP_EVERY;
-            if poll {
-                last_poll = Instant::now();
-            }
-            if noop {
-                last_noop = Instant::now();
-            }
-            let clock = clock_now();
-            if s.app.clock != clock {
-                s.app.clock = clock;
-                dirty |= s.app.idle;
-            }
-            match exchange(s, events, t, poll, noop) {
-                Ok(changed) => {
-                    dirty |= changed;
-                    if take_engine_status(s) {
-                        s.app.network = network_rows(&a, s);
-                        dirty = true;
-                    }
-                    if s.app.settings != saved {
-                        saved = s.app.settings.clone();
-                        save_settings(&a.settings, &saved);
-                    }
-                }
-                Err(e) => {
-                    eprintln!("lost the Core: {e}; reconnecting");
-                    last_screen = s.app.current().map(|sc| sc.component.name.clone());
-                    trouble = e.to_string();
-                    session = None;
-                    next_try = Instant::now() + RETRY_EVERY / 2;
-                    dirty = true;
-                }
-            }
-        }
-
-        if dirty || animating {
-            match &session {
-                Some(s) => animating = renderer.frame(&s.app, &mut canvas, now_ms(start)),
-                None => {
-                    animating = false;
-                    status(&mut canvas, "Connecting…", &format!("{}:{} — {trouble}", a.host, a.port));
-                }
-            }
-            frame = canvas.to_png();
+        if runner.step() {
+            frame = runner.canvas.to_png();
             version += 1;
-            dirty = false;
         }
         std::thread::sleep(Duration::from_millis(15));
     }
