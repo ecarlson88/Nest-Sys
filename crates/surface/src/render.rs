@@ -48,8 +48,17 @@ pub fn render(app: &App, canvas: &mut Canvas) {
             if let Some(item) = app.focused() {
                 canvas.text_centred(C, 96, &item.label, 3, WIDE, FG);
                 widget(item, mode, canvas);
+            } else if app.on_components_stop() {
+                canvas.text_centred(C, 96, "Components", 3, WIDE, FG);
+                canvas.disc(C, 250, 62.0, 54.0, ACCENT);
+                // A left-pointing arrowhead: back to the list.
+                for row in 0..41 {
+                    let half = 20 - (row - 20i32).abs();
+                    canvas.fill_rect(C - 14 + (20 - half), 230 + row, half + 4, 1, FG);
+                }
+                hint(canvas, "click for the list of components");
             }
-            dots(app.focus, screen.items.len(), canvas);
+            dots(app.focus, screen.items.len() + 1, canvas);
         }
     }
     canvas.mask_round();
