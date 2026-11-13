@@ -31,7 +31,8 @@ Save, then switch Designer to **Emulate** mode.
 
 ### 2. Run discovery
 
-On the PC running Designer (Windows: use `py` instead of `python3`):
+On the PC running Designer (Windows: use `py` instead of `python3`; in
+PowerShell, `> raw.txt` saves UTF-16, which is fine to send back as is):
 
 ```sh
 python3 qrc_discover.py 127.0.0.1 --raw > raw.txt

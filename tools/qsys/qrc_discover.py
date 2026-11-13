@@ -94,13 +94,14 @@ def pick_widget(c):
         notes.append("no Direction field")
 
     # Decide the data kind
-    if t in ("boolean", "bool", "toggle"):
+    # Type strings seen from Designer: Boolean, Float, Integer, Text, Trigger, Status.
+    if t == "boolean":
         kind = "bool"
-    elif t in ("trigger", "momentary"):
+    elif t == "trigger":
         kind = "trigger"
-    elif t in ("text", "string"):
+    elif t in ("text", "status"):
         kind = "text"
-    elif t in ("float", "integer", "int", "number", "knob", "state"):
+    elif t in ("float", "integer"):
         kind = "number"
     elif isinstance(v, bool):
         kind = "bool"
@@ -115,6 +116,8 @@ def pick_widget(c):
         return ("indicator" if read_only else "toggle"), "; ".join(notes)
     if kind == "trigger":
         return ("-" if read_only else "button"), "; ".join(notes)
+    if t == "status":
+        return "label", "; ".join(notes)
     if kind == "text":
         return ("label" if read_only else "text-entry (picker)"), "; ".join(notes)
     if kind == "number":
@@ -156,7 +159,7 @@ def main():
 
         for spec in args.set:
             target, eq, text = spec.partition("=")
-            comp, _, ctrl = target.rpartition(".")
+            comp, _, ctrl = target.partition(".")  # control names have dots (text.1)
             if not eq or not comp or not ctrl:
                 print("error: --set wants COMP.CTRL=VALUE, got %r" % spec, file=sys.stderr)
                 return 2

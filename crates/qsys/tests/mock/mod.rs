@@ -1,6 +1,7 @@
-//! A fake Core speaking QRC on 127.0.0.1, for tests. Its replies follow the
-//! shapes assumed in tools/qsys/mock_qrc_server.py; like that mock, it shows
-//! the client's logic, not what a real Core sends.
+//! A fake Core speaking QRC on 127.0.0.1, for tests. Its design is the one
+//! Designer's emulation described in tests/data/designer (the controls of
+//! Other_ Gain and Nest_Combo were not captured, so it has none); how it
+//! answers Set, Get and change groups is assumed from what Designer printed.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::{Read, Write};
@@ -36,29 +37,15 @@ pub struct MockCore {
 impl MockCore {
     pub fn start() -> MockCore {
         let mut s = State::default();
-        let design = json!({
-            "NEST_Zone1": [
-                {"Name": "gain", "Type": "Float", "Value": -12.0, "ValueMin": -100.0, "ValueMax": 20.0,
-                 "String": "-12.0dB", "Position": 0.77, "Direction": "Read/Write"},
-                {"Name": "mute", "Type": "Boolean", "Value": false, "ValueMin": 0, "ValueMax": 1,
-                 "String": "unmuted", "Position": 0.0, "Direction": "Read/Write"},
-                {"Name": "source", "Type": "Integer", "Value": 2, "ValueMin": 1, "ValueMax": 4,
-                 "String": "2", "Position": 0.33, "Direction": "Read/Write"},
-                {"Name": "page", "Type": "Trigger", "Value": false, "String": "", "Position": 0.0,
-                 "Direction": "Read/Write"},
-            ],
-            "NEST_Status": [
-                {"Name": "msg", "Type": "Text", "Value": "Ready", "String": "Ready", "Position": 0.0,
-                 "Direction": "Read Only"},
-            ],
-            "Other_Component": [
-                {"Name": "gain", "Type": "Float", "Value": 0.0, "ValueMin": -100.0, "ValueMax": 20.0,
-                 "String": "0.0dB", "Position": 1.0, "Direction": "Read/Write"},
-            ],
-        });
-        for (name, kind) in [("NEST_Zone1", "gain"), ("NEST_Status", "custom_controls"), ("Other_Component", "gain")] {
-            s.components.push(json!({"Name": name, "Type": kind, "Properties": []}));
-            for c in design[name].as_array().unwrap() {
+        let components: Value = serde_json::from_str(include_str!("../data/designer/components.json")).unwrap();
+        s.components = components.as_array().unwrap().clone();
+        for fixture in [
+            include_str!("../data/designer/controls_NEST_Panel.json"),
+            include_str!("../data/designer/controls_NEST_Zone1.json"),
+        ] {
+            let list: Value = serde_json::from_str(fixture).unwrap();
+            let name = list["Name"].as_str().unwrap();
+            for c in list["Controls"].as_array().unwrap() {
                 s.controls.insert((name.into(), c["Name"].as_str().unwrap().into()), c.clone());
             }
         }
@@ -93,7 +80,10 @@ fn set_value(s: &mut State, component: &str, control: &str, value: Value) -> Res
         Value::String(t) => Value::String(t.clone()),
         v => Value::String(v.to_string()),
     };
-    c["Value"] = value;
+    // Text controls have no Value, only String.
+    if c.get("Value").is_some() {
+        c["Value"] = value;
+    }
     for group in s.groups.values_mut() {
         if group.members.contains(&key) {
             group.dirty.insert(key.clone());

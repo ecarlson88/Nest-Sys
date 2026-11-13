@@ -1,0 +1,41 @@
+{
+  "Name": "NEST_Zone1",
+  "Controls": [
+    {
+      "Name": "bypass",
+      "Type": "Boolean",
+      "Value": false,
+      "String": "no",
+      "Position": 0.0,
+      "Direction": "Read/Write"
+    },
+    {
+      "Name": "gain",
+      "Type": "Float",
+      "Value": 0.0,
+      "ValueMin": -100.0,
+      "ValueMax": 20.0,
+      "StringMin": "-100dB",
+      "StringMax": "20.0dB",
+      "String": "0dB",
+      "Position": 0.83333331,
+      "Direction": "Read/Write"
+    },
+    {
+      "Name": "invert",
+      "Type": "Boolean",
+      "Value": false,
+      "String": "normal",
+      "Position": 0.0,
+      "Direction": "Read/Write"
+    },
+    {
+      "Name": "mute",
+      "Type": "Boolean",
+      "Value": false,
+      "String": "unmuted",
+      "Position": 0.0,
+      "Direction": "Read/Write"
+    }
+  ]
+}
