@@ -80,11 +80,16 @@ cargo run --release -p surface --bin sim -- 127.0.0.1
 
 Then open http://127.0.0.1:8480.
 
-| On the Nest | In the browser |
-|---|---|
-| turn the ring | mouse wheel, or ← → |
-| click | mouse button on the face, or Space |
-| hold the click (0.7 s) | hold the mouse button or Space |
+| On the Nest | In the browser | On a phone |
+|---|---|---|
+| turn the ring | mouse wheel, drag the grey ring, or ← → | drag around the grey ring |
+| click | click the face, or Space | tap the face |
+| hold the click (0.7 s) | hold the mouse button or Space | hold the face |
+
+To use a phone, start the simulator with `--listen 0.0.0.0:8480` and open
+`http://PC_ADDRESS:8480` on the phone (same network; Windows may ask to
+let the simulator through its firewall). On a touch screen the grey ring is
+wider, to put a thumb on, and each detent buzzes where the phone can.
 
 - **A Gain component** is a volume knob: the ring sets the level as it
   turns, shown as 0-100% of the gain's range, 1% a detent, a click mutes or unmutes, a hold opens the **Controls** list.
