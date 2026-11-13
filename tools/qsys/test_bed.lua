@@ -6,8 +6,8 @@
 --   Name      Kind                          On the Nest
 --   Lights    Button, Toggle                toggle (legend "Room Lights")
 --   Source    Text, shown as a Combo Box    click to choose from a list
---   Level     Knob, Float, -100 to 20       dial; click to adjust
---   Preset    Knob, Integer, 1 to 8         dial, a step a detent
+--   Level     Knob, in dB, -100 to 20       dial; click to adjust
+--   Mute      Button, Toggle                mutes Level
 --   Doorbell  Button, Trigger               button; rings Status for 3 s
 --   Lock      Button, Toggle                disables Source and Level
 --   Status    Indicator, Text               label, updated by the script
@@ -27,7 +27,7 @@ end
 local lights = control("Lights")
 local source = control("Source")
 local level = control("Level")
-local preset = control("Preset")
+local mute = control("Mute")
 local doorbell = control("Doorbell")
 local lock = control("Lock")
 local status = control("Status")
@@ -57,8 +57,8 @@ if level then
   level.EventHandler = function(c) say("Level " .. c.String) end
 end
 
-if preset then
-  preset.EventHandler = function(c) say("Preset " .. c.String) end
+if mute then
+  mute.EventHandler = function(c) say(c.Boolean and "Muted" or "Unmuted") end
 end
 
 if doorbell then
