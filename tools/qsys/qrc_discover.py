@@ -11,6 +11,7 @@ Usage:
   python3 qrc_discover.py CORE_IP --raw        # dump raw GetControls JSON (check field names!)
   python3 qrc_discover.py CORE_IP --watch 30   # then follow changes for 30 s
   python3 qrc_discover.py CORE_IP --set NEST_Zone1.gain=-20 --set NEST_Zone1.mute=true
+  python3 qrc_discover.py CORE_IP --get Nest_Combo.Control    # raw Component.Get
 
 QRC basics (https://help.qsys.com/Content/External_Control_APIs/QRC/QRC_Commands.htm):
   TCP port 1710, JSON-RPC 2.0, every message terminated with a NUL byte.
@@ -182,6 +183,8 @@ def main():
     ap.add_argument("--raw", action="store_true", help="print raw GetComponents/GetControls JSON")
     ap.add_argument("--watch", type=float, default=0, metavar="SEC", help="follow changes for SEC seconds")
     ap.add_argument("--all", action="store_true", help="ignore --prefix and list every named component")
+    ap.add_argument("--get", action="append", default=[], metavar="COMP.CTRL",
+                    help="print the raw Component.Get result (repeatable)")
     ap.add_argument("--set", action="append", default=[], metavar="COMP.CTRL=VALUE",
                     help="Component.Set before listing (repeatable); VALUE is JSON if it parses, else a string")
     args = ap.parse_args()
@@ -204,6 +207,12 @@ def main():
                 value = text
             q.call("Component.Set", {"Name": comp, "Controls": [{"Name": ctrl, "Value": value}]})
             print("set %s.%s = %r" % (comp, ctrl, value))
+
+        for spec in args.get:
+            comp, _, ctrl = spec.partition(".")
+            res = q.call("Component.Get", {"Name": comp, "Controls": [{"Name": ctrl}]})
+            print("--- Component.Get raw: %s ---" % spec)
+            print(json.dumps(res, indent=2))
 
         # The QRC docs' example sends a dummy "params"; follow it for safety.
         comps = q.call("Component.GetComponents", "test") or []
@@ -239,15 +248,20 @@ def main():
         if args.watch > 0:
             gid = "nest-discover"
             for name, ctrls in discovered.items():
+                shown = [c for c in ctrls if pick_widget(c, types.get(name, ""))[0] != "hidden"]
+                if not shown:
+                    continue
                 q.call("ChangeGroup.AddComponentControl", {
                     "Id": gid,
-                    "Component": {"Name": name, "Controls": [{"Name": c["Name"]} for c in ctrls]},
+                    "Component": {"Name": name, "Controls": [{"Name": c["Name"]} for c in shown]},
                 })
             print("\nwatching for %.0fs (Ctrl-C to stop)..." % args.watch)
             end = time.time() + args.watch
             last_noop = time.time()
             while time.time() < end:
                 res = q.call("ChangeGroup.Poll", {"Id": gid}) or {}
+                if args.raw and res.get("Changes"):
+                    print(json.dumps(res["Changes"]))
                 for ch in res.get("Changes", []):
                     print("  %s.%s = %s" % (ch.get("Component", "?"), ch.get("Name"),
                                             ch.get("String", ch.get("Value"))))

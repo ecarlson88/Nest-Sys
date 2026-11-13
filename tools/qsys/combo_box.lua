@@ -1,10 +1,9 @@
 -- Combo box for testing the Nest: paste into a Text Controller whose Code
 -- Name starts with NEST_ (any case) and Script Access is External or All.
 --
--- The Text Controller needs one Text control (Designer's default is
--- "Control", count 1, seen over QRC as "Control.1"). To see the list in
--- Designer, drag that control to the schematic or a UCI and set its style
--- to Combo Box.
+-- The Text Controller needs one Text control (Designer's default,
+-- "Control" with count 1, is seen over QRC as "Control"). To see the list
+-- in Designer, show that control as a Combo Box.
 
 local choices = { "Mic 1", "Mic 2", "Laptop", "Streaming" }
 

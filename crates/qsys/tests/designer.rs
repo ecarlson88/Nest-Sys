@@ -72,3 +72,18 @@ fn picks_custom_controls_widgets_by_name() {
         ]
     );
 }
+
+#[test]
+fn shows_only_a_text_controllers_own_controls() {
+    let combo = Component { name: "Nest_Combo".into(), kind: Some("device_controller_script".into()) };
+    let list = controls(include_str!("data/designer/controls_Nest_Combo.json"));
+    assert_eq!(list.len(), 19);
+    let shown: Vec<(&str, Widget)> = list
+        .iter()
+        .map(|c| (c.name.as_str(), pick_for(&combo, c).0))
+        .filter(|(_, w)| *w != Widget::Hidden)
+        .collect();
+    // A combo box: Designer reports no Choices, so it is plain text entry.
+    assert_eq!(shown, [("Control", Widget::TextEntry)]);
+    assert_eq!(find(&list, "Control").value, json!("Streaming"));
+}

@@ -104,8 +104,15 @@ fn run(a: Args) -> qsys::Result<()> {
     }
     if a.watch > 0 {
         for d in &found {
-            let names: Vec<&str> = d.controls.iter().map(|c| c.name.as_str()).collect();
-            q.subscribe(&d.component.name, &names)?;
+            let names: Vec<&str> = d
+                .controls
+                .iter()
+                .filter(|c| pick_for(&d.component, c).0 != Widget::Hidden)
+                .map(|c| c.name.as_str())
+                .collect();
+            if !names.is_empty() {
+                q.subscribe(&d.component.name, &names)?;
+            }
         }
         println!("\nwatching for {}s...", a.watch);
         let end = Instant::now() + Duration::from_secs(a.watch);
