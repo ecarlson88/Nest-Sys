@@ -156,8 +156,12 @@ fn run(a: Args) -> qsys::Result<()> {
 
         // A dial's turns are sent as one value per round of the loop.
         let mut sets: BTreeMap<(String, String), Set> = BTreeMap::new();
+        let t = now_ms(start);
+        if app.tick(t) {
+            dirty = true;
+        }
         for ev in events {
-            for set in app.handle(ev) {
+            for set in app.handle(ev, t) {
                 sets.insert((set.component.clone(), set.control.clone()), set);
             }
             dirty = true;
