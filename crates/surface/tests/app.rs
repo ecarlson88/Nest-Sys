@@ -82,7 +82,38 @@ fn the_ring_moves_between_controls_and_wraps() {
     run(&mut app, &[Turn(1)]);
     assert_eq!(focused(&app), "meter.1");
     run(&mut app, &[Turn(-2)]);
+    assert!(app.focused().is_none() && app.on_components_stop(), "after the last control");
+    run(&mut app, &[Turn(-1)]);
     assert_eq!(focused(&app), "trigger.1");
+    run(&mut app, &[Turn(2)]);
+    assert_eq!(focused(&app), "led.1", "wraps past the Components stop");
+}
+
+#[test]
+fn the_components_stop_opens_the_list() {
+    let mut app = design();
+    open(&mut app, "Zone1");
+    run(&mut app, &[Turn(-1)]);
+    assert!(app.on_components_stop());
+    assert!(run(&mut app, &[Down, Up, Click]).is_empty());
+    assert_eq!(app.mode, Mode::Menu { focus: 1 });
+}
+
+#[test]
+fn a_screen_of_only_a_momentary_can_still_be_left() {
+    let momentary = Control::from_json(&json!({"Name": "momentary.1", "Type": "Boolean", "Value": false,
+                                               "Direction": "Read/Write"})).unwrap();
+    let found = vec![Discovered {
+        component: Component { name: "NEST_Talk".into(), kind: Some("custom_controls".into()) },
+        controls: vec![momentary],
+    }];
+    let mut app = App::new(found, PREFIX);
+    assert!(run(&mut app, &[Down, Hold]).len() == 1, "pressed, and the hold keeps it pressed");
+    assert_eq!(app.mode, Mode::Browse);
+    run(&mut app, &[Up, Turn(1)]);
+    assert!(app.on_components_stop());
+    run(&mut app, &[Down, Up, Click]);
+    assert_eq!(app.mode, Mode::Menu { focus: 0 });
 }
 
 #[test]
@@ -193,7 +224,8 @@ fn renders_every_control_in_every_mode() {
     let mut canvas = Canvas::new(FACE);
     for screen in 0..app.screens.len() {
         app.screen = screen;
-        for focus in 0..app.screens[screen].items.len() {
+        // Every control and the Components stop.
+        for focus in 0..=app.screens[screen].items.len() {
             app.focus = focus;
             for mode in [Mode::Browse, Mode::Edit { choice: 1 }, Mode::Menu { focus: screen }] {
                 app.mode = mode;

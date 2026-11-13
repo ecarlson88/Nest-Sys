@@ -2,10 +2,12 @@
 //! from Q-SYS and the display so it can be tested on its own.
 //!
 //! One component per screen. On a screen:
-//! - the ring moves between its controls (wrapping);
+//! - the ring moves between its controls and, after the last, a
+//!   "Components" stop (wrapping);
 //! - a click acts on the control: a toggle flips, a button fires, a dial,
-//!   number or picker opens for editing;
-//! - holding the click opens the list of components.
+//!   number or picker opens for editing; on the Components stop it opens
+//!   the list of components;
+//! - holding the click also opens the list (except on a momentary button).
 //!
 //! While editing, the ring changes the value (a dial's is sent as it turns;
 //! a picker's when the click picks it) and a click or hold closes it. A
@@ -123,8 +125,15 @@ impl App {
         self.screens.get(self.screen)
     }
 
+    /// The focused control; None on the Components stop.
     pub fn focused(&self) -> Option<&Item> {
         self.current()?.items.get(self.focus)
+    }
+
+    /// Whether the focus is on the stop after the last control that opens
+    /// the list of components.
+    pub fn on_components_stop(&self) -> bool {
+        self.mode == Mode::Browse && self.current().is_some_and(|s| self.focus == s.items.len())
     }
 
     /// The controls to follow: every shown control, by component.
@@ -174,19 +183,28 @@ impl App {
     fn browse(&mut self, ev: Event) -> Vec<Set> {
         let component = self.screens[self.screen].component.name.clone();
         let count = self.screens[self.screen].items.len();
-        let Some(item) = self.screens[self.screen].items.get_mut(self.focus) else { return Vec::new() };
+        match ev {
+            // The controls, then the Components stop.
+            Event::Turn(n) => {
+                self.focus = wrap(self.focus, n, count + 1);
+                return Vec::new();
+            }
+            Event::Hold => {
+                self.mode = Mode::Menu { focus: self.screen };
+                return Vec::new();
+            }
+            _ => {}
+        }
+        let Some(item) = self.screens[self.screen].items.get_mut(self.focus) else {
+            if ev == Event::Click {
+                self.mode = Mode::Menu { focus: self.screen };
+            }
+            return Vec::new();
+        };
         let set = |item: &Item, value: Value| {
             vec![Set { component: component.clone(), control: item.control.name.clone(), value }]
         };
         match (ev, &item.widget) {
-            (Event::Turn(n), _) => {
-                self.focus = wrap(self.focus, n, count);
-                Vec::new()
-            }
-            (Event::Hold, _) => {
-                self.mode = Mode::Menu { focus: self.screen };
-                Vec::new()
-            }
             (Event::Down, Widget::Momentary) => {
                 item.control.value = json!(true);
                 item.control.string = None;

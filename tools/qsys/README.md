@@ -86,13 +86,15 @@ Then open http://127.0.0.1:8480.
 | click | mouse button on the face, or Space |
 | hold the click (0.7 s) | hold the mouse button or Space |
 
-- **On a screen:** the ring moves between the component's controls. A click
-  flips a toggle, fires a trigger, or opens a dial or combo box for editing.
-  A momentary button is on while the click is down.
+- **On a screen:** the ring moves between the component's controls, and
+  after the last one to a **Components** stop; clicking it opens the list of
+  components. A click on a control flips a toggle, fires a trigger, or opens
+  a dial or combo box for editing. A momentary button is on while the click
+  is down (holding it keeps it on rather than opening the list).
 - **Editing:** the ring changes a dial's value as it turns (sent live). For a
   combo box it moves through the choices; a click picks one, a hold cancels.
   A click closes a dial.
-- **Hold** on a screen opens the list of components. There, the ring moves,
+- **Hold** on a screen is a shortcut to the list of components. There, the ring moves,
   a click opens a component, and a hold goes back.
 
 The first build downloads and compiles dependencies and takes a few
