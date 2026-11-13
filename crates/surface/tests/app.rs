@@ -193,19 +193,52 @@ fn a_dial_steps_while_editing_and_stays_in_range() {
 }
 
 #[test]
-fn a_picker_sends_the_choice_clicked_and_a_hold_cancels() {
+fn a_lone_combo_box_scrolls_at_once_and_a_click_selects() {
     let mut app = design();
     open(&mut app, "Combo");
-    run(&mut app, &[Down, Up, Click]);
-    assert_eq!(app.mode, Mode::Edit { choice: 3 }, "on the current choice, Streaming");
-    assert!(run(&mut app, &[Turn(3)]).is_empty(), "nothing sent while choosing");
+    assert_eq!(app.current().unwrap().layout, Layout::Selector { item: 0 });
+    assert!(run(&mut app, &[Down, Up, Click]).is_empty(), "a click at rest does nothing");
+    // Streaming in the fixture: three on is Laptop, nothing sent yet.
+    assert!(run(&mut app, &[Turn(3)]).is_empty());
+    assert_eq!(app.mode, Mode::Edit { choice: 2 });
     assert_eq!(run(&mut app, &[Down, Up, Click]), [set("Nest_Combo", "Control", json!("Laptop"))]);
-    assert_eq!(app.focused().unwrap().control.string.as_deref(), Some("Laptop"));
-    run(&mut app, &[Down, Up, Click]);
-    assert_eq!(app.mode, Mode::Edit { choice: 2 }, "opens on the current choice");
-    assert!(run(&mut app, &[Turn(1), Down, Hold, Up]).is_empty());
     assert_eq!(app.mode, Mode::Browse);
     assert_eq!(app.focused().unwrap().control.string.as_deref(), Some("Laptop"));
+    // Scrolling again starts from Laptop; a hold drops it and opens the list.
+    run(&mut app, &[Turn(1)]);
+    assert_eq!(app.mode, Mode::Edit { choice: 3 });
+    assert!(run(&mut app, &[Down, Hold, Up]).is_empty());
+    assert_eq!(app.mode, Mode::Menu { focus: 2 });
+    assert_eq!(app.screens[2].items[0].control.string.as_deref(), Some("Laptop"));
+}
+
+/// A text controller with a combo box and a button beside it.
+fn combo_and_button() -> App {
+    let mut combo = Control::from_json(&json!({"Name": "source", "Type": "Text", "String": "B",
+                                               "Direction": "Read/Write"})).unwrap();
+    combo.choices = Some(vec!["A".into(), "B".into(), "C".into()]);
+    let go = Control::from_json(&json!({"Name": "go", "Type": "Trigger", "Value": 0.0,
+                                        "Direction": "Read/Write"})).unwrap();
+    App::new(vec![Discovered {
+        component: Component { name: "NEST_Room".into(), kind: Some("device_controller_script".into()) },
+        controls: vec![combo, go],
+    }], PREFIX)
+}
+
+#[test]
+fn a_combo_box_beside_other_controls_opens_with_a_click() {
+    let mut app = combo_and_button();
+    assert_eq!(app.current().unwrap().layout, Layout::Controls);
+    assert_eq!(focused(&app), "source");
+    run(&mut app, &[Down, Up, Click]);
+    assert_eq!(app.mode, Mode::Edit { choice: 1 }, "on the current choice, B");
+    assert!(run(&mut app, &[Turn(1)]).is_empty(), "nothing sent while choosing");
+    assert_eq!(run(&mut app, &[Down, Up, Click]), [set("NEST_Room", "source", json!("C"))]);
+    run(&mut app, &[Down, Up, Click, Turn(1), Down, Hold, Up]);
+    assert_eq!(app.mode, Mode::Browse, "a hold cancels");
+    assert_eq!(app.focused().unwrap().control.string.as_deref(), Some("C"));
+    run(&mut app, &[Turn(1)]);
+    assert_eq!(focused(&app), "go", "the ring moves between controls");
 }
 
 #[test]
@@ -305,9 +338,10 @@ fn editing_ends_after_five_seconds_without_input() {
 fn a_timed_out_picker_sends_nothing() {
     let mut app = design();
     open(&mut app, "Combo");
-    app.handle(Click, 0);
     app.handle(Turn(1), 100);
+    assert!(matches!(app.mode, Mode::Edit { .. }));
     assert!(app.tick(5_100));
+    assert_eq!(app.mode, Mode::Browse);
     assert_eq!(app.focused().unwrap().control.string.as_deref(), Some("Streaming"));
 }
 

@@ -6,6 +6,10 @@
 //! - **Volume**, for a gain component: the ring sets the gain as it turns
 //!   (while muted, it first unmutes), a click toggles its mute, and a hold
 //!   opens the list of components. Its bypass and invert are not shown.
+//! - **Selector**, for a component whose one control is a combo box: the
+//!   ring scrolls its choices at once, a click sends the one shown, and
+//!   EDIT_TIMEOUT_MS without input goes back to the current one; a hold
+//!   opens the list of components.
 //! - **Controls**, for any other: the ring moves between its controls and,
 //!   after the last, a "Components" stop (wrapping); a click acts on the
 //!   control (a toggle flips, a button fires, a dial, number or picker opens
@@ -62,6 +66,8 @@ pub enum Layout {
     Controls,
     /// Indexes into the screen's items.
     Volume { gain: usize, mute: Option<usize> },
+    /// The index of the one item, a picker.
+    Selector { item: usize },
 }
 
 pub struct Screen {
@@ -79,13 +85,18 @@ impl Screen {
         !self.bypassed
             && match self.layout {
                 Layout::Volume { gain, .. } => self.items[gain].shown(),
+                Layout::Selector { item } => self.items[item].shown(),
                 Layout::Controls => self.items.iter().any(Item::shown),
             }
     }
 
     /// Where the ring stops on a Controls screen: each shown control's
-    /// index, then items.len() for the Components stop.
+    /// index, then items.len() for the Components stop. A Selector's one
+    /// stop is its item.
     pub fn stops(&self) -> Vec<usize> {
+        if let Layout::Selector { item } = self.layout {
+            return vec![item];
+        }
         let mut stops: Vec<usize> = (0..self.items.len()).filter(|&i| self.items[i].shown()).collect();
         stops.push(self.items.len());
         stops
@@ -229,6 +240,7 @@ fn screen_of(d: Discovered, prefix: &str) -> Option<Screen> {
             items = kept;
             Layout::Volume { gain: g, mute: m }
         }
+        _ if items.len() == 1 && matches!(items[0].widget, Widget::Picker { .. }) => Layout::Selector { item: 0 },
         _ => Layout::Controls,
     };
     (!items.is_empty()).then_some(Screen { component: d.component, title, items, layout, has_bypass, bypassed })
@@ -252,6 +264,7 @@ impl App {
         let s = self.current()?;
         match s.layout {
             Layout::Controls => s.items.get(self.focus).filter(|i| i.shown()),
+            Layout::Selector { item } => s.items.get(item),
             Layout::Volume { .. } => None,
         }
     }
@@ -318,6 +331,9 @@ impl App {
             }
         }
         let s = &self.screens[self.screen];
+        if let Layout::Selector { item } = s.layout {
+            self.focus = item;
+        }
         if s.layout == Layout::Controls {
             let stops = s.stops();
             if !stops.contains(&self.focus) {
@@ -369,6 +385,7 @@ impl App {
             Mode::Edit { choice } => self.edit(ev, choice),
             Mode::Browse => match self.screens[self.screen].layout {
                 Layout::Volume { gain, mute } => self.volume(ev, gain, mute),
+                Layout::Selector { item } => self.selector(ev, item),
                 Layout::Controls => self.browse(ev),
             },
         }
@@ -405,6 +422,24 @@ impl App {
             }
             _ => Vec::new(),
         }
+    }
+
+    /// A Selector at rest: a turn starts scrolling its choices from the
+    /// current one (the scrolling and picking are a picker's editing).
+    fn selector(&mut self, ev: Event, item: usize) -> Vec<Set> {
+        match ev {
+            Event::Turn(n) => {
+                let c = &self.screens[self.screen].items[item];
+                let Widget::Picker { choices } = &c.widget else { return Vec::new() };
+                let current = c.control.string.as_deref().unwrap_or("");
+                let at = choices.iter().position(|ch| ch == current).unwrap_or(0);
+                self.focus = item;
+                self.mode = Mode::Edit { choice: wrap(at, n, choices.len()) };
+            }
+            Event::Hold => self.mode = Mode::Menu { focus: self.screen },
+            _ => {}
+        }
+        Vec::new()
     }
 
     fn browse(&mut self, ev: Event) -> Vec<Set> {
@@ -473,6 +508,10 @@ impl App {
             (Event::Click | Event::Hold, Widget::Picker { choices }) => {
                 self.mode = Mode::Browse;
                 if ev == Event::Hold {
+                    // A Selector's hold drops the choice and opens the list.
+                    if matches!(self.screens[self.screen].layout, Layout::Selector { .. }) {
+                        self.mode = Mode::Menu { focus: self.screen };
+                    }
                     return Vec::new();
                 }
                 let Some(pick) = choices.get(choice) else { return Vec::new() };

@@ -90,6 +90,11 @@ Then open http://127.0.0.1:8480.
   turns, a click mutes or unmutes, a hold opens the **Controls** list.
   While muted (red), the first turn unmutes without changing the level.
   Its bypass and invert are not shown.
+- **A component whose only control is a combo box** (e.g. a Text
+  Controller running `combo_box.lua`): its choices are always on a wheel.
+  Turning scrolls straight away; a click selects the one shown (nothing is
+  sent until then), and 5 s without input goes back to the current one. A
+  hold opens the Controls list.
 - **On any other screen:** the ring moves between the component's controls,
   and after the last one to a **Controls** stop; clicking it opens the
   Controls list (one entry per component). A click on a control flips a toggle, fires a trigger, or opens
