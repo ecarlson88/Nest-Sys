@@ -10,3 +10,7 @@ serde_json = "1"
 fontdue = { version = "0.9", default-features = false, features = ["std"] }
 png = "0.17"
 chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
+
+# The unit's framebuffer and input devices (src/device.rs).
+[target.'cfg(target_os = "linux")'.dependencies]
+libc = "0.2"

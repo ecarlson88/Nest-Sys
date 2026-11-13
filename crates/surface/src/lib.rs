@@ -9,6 +9,8 @@
 
 pub mod app;
 pub mod canvas;
+#[cfg(target_os = "linux")]
+pub mod device;
 pub mod input;
 pub mod render;
 pub mod runner;
