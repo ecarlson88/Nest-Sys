@@ -87,22 +87,27 @@ Then open http://127.0.0.1:8480.
 | hold the click (0.7 s) | hold the mouse button or Space |
 
 - **A Gain component** is a volume knob: the ring sets the level as it
-  turns, a click mutes or unmutes, a hold opens the list of components.
+  turns, a click mutes or unmutes, a hold opens the **Controls** list.
+  While muted (red), the first turn unmutes without changing the level.
   Its bypass and invert are not shown.
-- **On any other screen:** the ring moves between the component's controls, and
-  after the last one to a **Components** stop; clicking it opens the list of
-  components. A click on a control flips a toggle, fires a trigger, or opens
+- **On any other screen:** the ring moves between the component's controls,
+  and after the last one to a **Controls** stop; clicking it opens the
+  Controls list (one entry per component). A click on a control flips a toggle, fires a trigger, or opens
   a dial or combo box for editing. A momentary button is on while the click
   is down (holding it keeps it on rather than opening the list).
 - **Editing:** the ring changes a dial's value as it turns (sent live). For a
   combo box it moves through the choices; a click picks one, a hold cancels.
   A click closes a dial. Editing also ends after 5 s without a turn or click
   (a combo box's choice is then dropped).
-- **Hold** on a screen is a shortcut to the list of components. There, the ring moves,
-  a click opens a component, and a hold goes back.
+- **Hold** on a screen is a shortcut to the Controls list. There, the ring
+  moves and a click opens a component.
 
 Controls the Core reports Invisible or Disabled are left off, and a
 component whose bypass is on disappears from the Nest until it goes off.
+
+If the Core goes away (Designer leaving emulation, say), the screen shows
+"Connecting…" and tries again every 2 s; when the Core is back, it
+discovers the design again, so changes made meanwhile show up.
 
 The first build downloads and compiles dependencies and takes a few
 minutes. Options: `--port`, `--user`/`--password`, `--prefix`,
