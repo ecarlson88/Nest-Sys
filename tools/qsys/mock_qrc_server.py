@@ -2,10 +2,9 @@
 """
 mock_qrc_server.py - tiny fake Q-SYS Core for testing qrc_discover.py offline.
 
-The response shapes below are ASSUMED from the QRC docs (Name/Type/Value/
-ValueMin/ValueMax/Direction/String). They test the script's logic only; they do
-NOT prove a real Core returns these fields. Verify with `qrc_discover.py --raw`
-against a real Core or Designer emulation.
+The design below is what Designer's emulation returned for a test design
+(Text controls have no Value, only String). How it answers Set, Get and change
+groups is assumed; passing against it tests the script's logic only.
 
 Usage: python3 mock_qrc_server.py [port]   (default 1710; use e.g. 11710 if busy)
 """
@@ -15,40 +14,162 @@ import sys
 import threading
 
 STATE = {
-    ("NEST_Zone1", "gain"): -12.0,
-    ("NEST_Zone1", "mute"): False,
-    ("NEST_Zone1", "source"): 2,
-    ("NEST_Zone1", "page"): False,
-    ("NEST_Status", "msg"): "Ready",
+    ('NEST_Zone1', 'bypass'): False,
+    ('NEST_Zone1', 'gain'): 0.0,
+    ('NEST_Zone1', 'invert'): False,
+    ('NEST_Zone1', 'mute'): False,
+    ('NEST_Panel', 'led.1'): False,
+    ('NEST_Panel', 'meter.1'): -120.0,
+    ('NEST_Panel', 'momentary.1'): False,
+    ('NEST_Panel', 'text.1'): '',
+    ('NEST_Panel', 'text.display.1'): '',
+    ('NEST_Panel', 'toggle.1'): False,
+    ('NEST_Panel', 'trigger.1'): 0.0,
 }
 LOCK = threading.Lock()
 POLLS = {"n": 0}
 
+# Shapes as Designer's emulation returned them (crates/qsys/tests/data/designer).
 COMPONENTS = [
+    {"Name": "NEST_Panel", "Type": "custom_controls", "Properties": []},
+    {"Name": "Other_ Gain", "Type": "gain", "Properties": []},
     {"Name": "NEST_Zone1", "Type": "gain", "Properties": []},
-    {"Name": "NEST_Status", "Type": "custom_controls", "Properties": []},
-    {"Name": "Other_Component", "Type": "gain", "Properties": []},
+    {"Name": "Nest_Combo", "Type": "device_controller_script", "Properties": []},
 ]
 
 CONTROLS = {
     "NEST_Zone1": [
-        {"Name": "gain", "Type": "Float", "Value": -12.0, "ValueMin": -100.0, "ValueMax": 20.0,
-         "String": "-12.0dB", "Position": 0.77, "Direction": "Read/Write"},
-        {"Name": "mute", "Type": "Boolean", "Value": False, "ValueMin": 0, "ValueMax": 1,
-         "String": "unmuted", "Position": 0.0, "Direction": "Read/Write"},
-        {"Name": "source", "Type": "Integer", "Value": 2, "ValueMin": 1, "ValueMax": 4,
-         "String": "2", "Position": 0.33, "Direction": "Read/Write"},
-        {"Name": "page", "Type": "Trigger", "Value": False, "String": "", "Position": 0.0,
-         "Direction": "Read/Write"},
+        {
+            "Name": "bypass",
+            "Type": "Boolean",
+            "Value": False,
+            "String": "no",
+            "Position": 0.0,
+            "Direction": "Read/Write"
+        },
+        {
+            "Name": "gain",
+            "Type": "Float",
+            "Value": 0.0,
+            "ValueMin": -100.0,
+            "ValueMax": 20.0,
+            "StringMin": "-100dB",
+            "StringMax": "20.0dB",
+            "String": "0dB",
+            "Position": 0.83333331,
+            "Direction": "Read/Write"
+        },
+        {
+            "Name": "invert",
+            "Type": "Boolean",
+            "Value": False,
+            "String": "normal",
+            "Position": 0.0,
+            "Direction": "Read/Write"
+        },
+        {
+            "Name": "mute",
+            "Type": "Boolean",
+            "Value": False,
+            "String": "unmuted",
+            "Position": 0.0,
+            "Direction": "Read/Write"
+        }
     ],
-    "NEST_Status": [
-        {"Name": "msg", "Type": "Text", "Value": "Ready", "String": "Ready", "Position": 0.0,
-         "Direction": "Read Only"},
+    "NEST_Panel": [
+        {
+            "Name": "led.1",
+            "Type": "Boolean",
+            "Value": False,
+            "String": "false",
+            "Position": 0.0,
+            "Direction": "Read/Write"
+        },
+        {
+            "Name": "meter.1",
+            "Type": "Float",
+            "Value": -120.0,
+            "ValueMin": -120.0,
+            "ValueMax": 20.0,
+            "StringMin": "-120dB",
+            "StringMax": "20.0dB",
+            "String": "-120dB",
+            "Position": 0.0,
+            "Direction": "Read/Write"
+        },
+        {
+            "Name": "momentary.1",
+            "Type": "Boolean",
+            "Value": False,
+            "String": "false",
+            "Position": 0.0,
+            "Direction": "Read/Write"
+        },
+        {
+            "Name": "text.1",
+            "Type": "Text",
+            "String": "",
+            "Direction": "Read/Write"
+        },
+        {
+            "Name": "text.display.1",
+            "Type": "Text",
+            "String": "",
+            "Direction": "Read/Write"
+        },
+        {
+            "Name": "toggle.1",
+            "Type": "Boolean",
+            "Value": False,
+            "String": "false",
+            "Position": 0.0,
+            "Direction": "Read/Write"
+        },
+        {
+            "Name": "trigger.1",
+            "Type": "Trigger",
+            "Value": 0.0,
+            "Direction": "Read/Write"
+        }
     ],
-    "Other_Component": [
-        {"Name": "gain", "Type": "Float", "Value": 0.0, "ValueMin": -100.0, "ValueMax": 20.0,
-         "String": "0.0dB", "Position": 1.0, "Direction": "Read/Write"},
-    ],
+    "Other_ Gain": [
+        {
+            "Name": "bypass",
+            "Type": "Boolean",
+            "Value": False,
+            "String": "no",
+            "Position": 0.0,
+            "Direction": "Read/Write"
+        },
+        {
+            "Name": "gain",
+            "Type": "Float",
+            "Value": 0.0,
+            "ValueMin": -100.0,
+            "ValueMax": 20.0,
+            "StringMin": "-100dB",
+            "StringMax": "20.0dB",
+            "String": "0dB",
+            "Position": 0.83333331,
+            "Direction": "Read/Write"
+        },
+        {
+            "Name": "invert",
+            "Type": "Boolean",
+            "Value": False,
+            "String": "normal",
+            "Position": 0.0,
+            "Direction": "Read/Write"
+        },
+        {
+            "Name": "mute",
+            "Type": "Boolean",
+            "Value": False,
+            "String": "unmuted",
+            "Position": 0.0,
+            "Direction": "Read/Write"
+        }
+    ]
 }
 
 
@@ -86,8 +207,15 @@ class Handler(socketserver.BaseRequestHandler):
         elif m == "Component.GetControls":
             name = p["Name"]
             with LOCK:
-                ctrls = [dict(c, Value=STATE.get((name, c["Name"]), c["Value"]))
-                         for c in CONTROLS.get(name, [])]
+                ctrls = []
+                for c in CONTROLS.get(name, []):
+                    c = dict(c)
+                    v = STATE.get((name, c["Name"]))
+                    if "Value" in c:
+                        c["Value"] = v
+                    else:
+                        c["String"] = v
+                    ctrls.append(c)
             res = {"Name": name, "Controls": ctrls}
         elif m == "Component.Get":
             name = p["Name"]
@@ -114,7 +242,7 @@ class Handler(socketserver.BaseRequestHandler):
             changes = []
             if n % 2 == 0:
                 changes.append({"Component": "NEST_Zone1", "Name": "gain",
-                                "Value": -12.0 + n, "String": "%.1fdB" % (-12.0 + n)})
+                                "Value": -20.0 + n, "String": "%.1fdB" % (-20.0 + n)})
             res = {"Id": p["Id"], "Changes": changes}
         else:
             self.send({"jsonrpc": "2.0", "id": rid,

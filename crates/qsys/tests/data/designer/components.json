@@ -1,0 +1,363 @@
+[
+  {
+    "ID": "NEST_Panel",
+    "Name": "NEST_Panel",
+    "Type": "custom_controls",
+    "Properties": [
+      {
+        "Name": "type_1",
+        "Value": "15",
+        "PrettyName": "Type"
+      },
+      {
+        "Name": "count_1",
+        "Value": "1",
+        "PrettyName": "Count"
+      },
+      {
+        "Name": "range_custom_1",
+        "Value": "False",
+        "PrettyName": "Customize range"
+      },
+      {
+        "Name": "range_minimum_1",
+        "Value": "0",
+        "PrettyName": "Minimum"
+      },
+      {
+        "Name": "range_maximum_1",
+        "Value": "0",
+        "PrettyName": "Maximum"
+      },
+      {
+        "Name": "type_2",
+        "Value": "9",
+        "PrettyName": "Type"
+      },
+      {
+        "Name": "count_2",
+        "Value": "1",
+        "PrettyName": "Count"
+      },
+      {
+        "Name": "range_custom_2",
+        "Value": "False",
+        "PrettyName": "Customize range"
+      },
+      {
+        "Name": "range_minimum_2",
+        "Value": "0",
+        "PrettyName": "Minimum"
+      },
+      {
+        "Name": "range_maximum_2",
+        "Value": "0",
+        "PrettyName": "Maximum"
+      },
+      {
+        "Name": "type_3",
+        "Value": "8",
+        "PrettyName": "Type"
+      },
+      {
+        "Name": "count_3",
+        "Value": "1",
+        "PrettyName": "Count"
+      },
+      {
+        "Name": "range_custom_3",
+        "Value": "False",
+        "PrettyName": "Customize range"
+      },
+      {
+        "Name": "range_minimum_3",
+        "Value": "0",
+        "PrettyName": "Minimum"
+      },
+      {
+        "Name": "range_maximum_3",
+        "Value": "0",
+        "PrettyName": "Maximum"
+      },
+      {
+        "Name": "type_4",
+        "Value": "17",
+        "PrettyName": "Type"
+      },
+      {
+        "Name": "count_4",
+        "Value": "1",
+        "PrettyName": "Count"
+      },
+      {
+        "Name": "range_custom_4",
+        "Value": "False",
+        "PrettyName": "Customize range"
+      },
+      {
+        "Name": "range_minimum_4",
+        "Value": "0",
+        "PrettyName": "Minimum"
+      },
+      {
+        "Name": "range_maximum_4",
+        "Value": "0",
+        "PrettyName": "Maximum"
+      },
+      {
+        "Name": "type_5",
+        "Value": "14",
+        "PrettyName": "Type"
+      },
+      {
+        "Name": "count_5",
+        "Value": "1",
+        "PrettyName": "Count"
+      },
+      {
+        "Name": "range_custom_5",
+        "Value": "False",
+        "PrettyName": "Customize range"
+      },
+      {
+        "Name": "range_minimum_5",
+        "Value": "0",
+        "PrettyName": "Minimum"
+      },
+      {
+        "Name": "range_maximum_5",
+        "Value": "0",
+        "PrettyName": "Maximum"
+      },
+      {
+        "Name": "type_6",
+        "Value": "13",
+        "PrettyName": "Type"
+      },
+      {
+        "Name": "count_6",
+        "Value": "1",
+        "PrettyName": "Count"
+      },
+      {
+        "Name": "range_custom_6",
+        "Value": "False",
+        "PrettyName": "Customize range"
+      },
+      {
+        "Name": "range_minimum_6",
+        "Value": "0",
+        "PrettyName": "Minimum"
+      },
+      {
+        "Name": "range_maximum_6",
+        "Value": "0",
+        "PrettyName": "Maximum"
+      },
+      {
+        "Name": "type_7",
+        "Value": "16",
+        "PrettyName": "Type"
+      },
+      {
+        "Name": "count_7",
+        "Value": "1",
+        "PrettyName": "Count"
+      },
+      {
+        "Name": "range_custom_7",
+        "Value": "False",
+        "PrettyName": "Customize range"
+      },
+      {
+        "Name": "range_minimum_7",
+        "Value": "0",
+        "PrettyName": "Minimum"
+      },
+      {
+        "Name": "range_maximum_7",
+        "Value": "0",
+        "PrettyName": "Maximum"
+      },
+      {
+        "Name": "type_8",
+        "Value": "0",
+        "PrettyName": "Type"
+      },
+      {
+        "Name": "count_8",
+        "Value": "1",
+        "PrettyName": "Count"
+      },
+      {
+        "Name": "range_custom_8",
+        "Value": "False",
+        "PrettyName": "Customize range"
+      },
+      {
+        "Name": "range_minimum_8",
+        "Value": "0",
+        "PrettyName": "Minimum"
+      },
+      {
+        "Name": "range_maximum_8",
+        "Value": "0",
+        "PrettyName": "Maximum"
+      },
+      {
+        "Name": "type_9",
+        "Value": "0",
+        "PrettyName": "Type"
+      },
+      {
+        "Name": "count_9",
+        "Value": "1",
+        "PrettyName": "Count"
+      },
+      {
+        "Name": "range_custom_9",
+        "Value": "False",
+        "PrettyName": "Customize range"
+      },
+      {
+        "Name": "range_minimum_9",
+        "Value": "0",
+        "PrettyName": "Minimum"
+      },
+      {
+        "Name": "range_maximum_9",
+        "Value": "0",
+        "PrettyName": "Maximum"
+      },
+      {
+        "Name": "type_10",
+        "Value": "0",
+        "PrettyName": "Type"
+      },
+      {
+        "Name": "count_10",
+        "Value": "1",
+        "PrettyName": "Count"
+      },
+      {
+        "Name": "range_custom_10",
+        "Value": "False",
+        "PrettyName": "Customize range"
+      },
+      {
+        "Name": "range_minimum_10",
+        "Value": "0",
+        "PrettyName": "Minimum"
+      },
+      {
+        "Name": "range_maximum_10",
+        "Value": "0",
+        "PrettyName": "Maximum"
+      }
+    ],
+    "Controls": null,
+    "ControlSource": 2
+  },
+  {
+    "ID": "Other_ Gain",
+    "Name": "Other_ Gain",
+    "Type": "gain",
+    "Properties": [
+      {
+        "Name": "max_gain",
+        "Value": "20",
+        "PrettyName": "Max Gain (dB)"
+      },
+      {
+        "Name": "min_gain",
+        "Value": "-100",
+        "PrettyName": "Min Gain (dB)"
+      },
+      {
+        "Name": "enable_stepper",
+        "Value": "False",
+        "PrettyName": "Enable Ramp Controls"
+      },
+      {
+        "Name": "step_mode",
+        "Value": "0",
+        "PrettyName": "Mode"
+      },
+      {
+        "Name": "num_steps",
+        "Value": "8",
+        "PrettyName": "Number of Steps"
+      },
+      {
+        "Name": "multi_channel_type",
+        "Value": "1",
+        "PrettyName": "Type"
+      },
+      {
+        "Name": "multi_channel_count",
+        "Value": "8",
+        "PrettyName": "Count"
+      }
+    ],
+    "Controls": null,
+    "ControlSource": 2
+  },
+  {
+    "ID": "NEST_Zone1",
+    "Name": "NEST_Zone1",
+    "Type": "gain",
+    "Properties": [
+      {
+        "Name": "max_gain",
+        "Value": "20",
+        "PrettyName": "Max Gain (dB)"
+      },
+      {
+        "Name": "min_gain",
+        "Value": "-100",
+        "PrettyName": "Min Gain (dB)"
+      },
+      {
+        "Name": "enable_stepper",
+        "Value": "False",
+        "PrettyName": "Enable Ramp Controls"
+      },
+      {
+        "Name": "step_mode",
+        "Value": "0",
+        "PrettyName": "Mode"
+      },
+      {
+        "Name": "num_steps",
+        "Value": "8",
+        "PrettyName": "Number of Steps"
+      },
+      {
+        "Name": "multi_channel_type",
+        "Value": "1",
+        "PrettyName": "Type"
+      },
+      {
+        "Name": "multi_channel_count",
+        "Value": "8",
+        "PrettyName": "Count"
+      }
+    ],
+    "Controls": null,
+    "ControlSource": 2
+  },
+  {
+    "ID": "Nest_Combo",
+    "Name": "Nest_Combo",
+    "Type": "device_controller_script",
+    "Properties": [
+      {
+        "Name": "auto_start",
+        "Value": "True",
+        "PrettyName": "Start Automatically"
+      }
+    ],
+    "Controls": null,
+    "ControlSource": 2
+  }
+]

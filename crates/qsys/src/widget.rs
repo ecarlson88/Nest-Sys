@@ -9,6 +9,7 @@
 //! | Number without a range       | number entry (ring steps the value)     |
 //! | Text, writable               | text entry (a picker of presets)        |
 //! | Read-only                    | indicator, meter or label; none for a trigger |
+//! | Status                       | label                                   |
 
 use crate::control::{Control, Kind};
 
@@ -78,6 +79,7 @@ pub fn pick(c: &Control) -> (Widget, Vec<Note>) {
         Kind::Trigger => Widget::Hidden,
         Kind::Text if writable => Widget::TextEntry,
         Kind::Text => Widget::Label,
+        Kind::Status => Widget::Label,
         Kind::Number => match (c.range(), writable) {
             (Some((min, max)), true) => Widget::Dial { min, max },
             (Some((min, max)), false) => Widget::Meter { min, max },
@@ -123,6 +125,11 @@ mod tests {
             Widget::Meter { min: -100.0, max: 20.0 }
         );
         assert_eq!(widget(json!({"Name": "n", "Type": "Integer", "Direction": ro})).0, Widget::Label);
+        assert_eq!(
+            widget(json!({"Name": "script.status", "Type": "Status", "ValueMin": 0, "ValueMax": 5,
+                          "String": "OK", "Direction": ro})).0,
+            Widget::Label
+        );
     }
 
     #[test]

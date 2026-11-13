@@ -72,7 +72,7 @@ fn run(a: Args) -> qsys::Result<()> {
         println!("logged on as {user}");
     }
     for spec in &a.sets {
-        let parsed = spec.split_once('=').and_then(|(t, v)| t.rsplit_once('.').map(|(c, n)| (c, n, v)));
+        let parsed = spec.split_once('=').and_then(|(t, v)| t.split_once('.').map(|(c, n)| (c, n, v)));
         let Some((comp, ctrl, text)) = parsed else {
             eprintln!("--set wants COMP.CTRL=VALUE, got {spec:?}");
             continue;

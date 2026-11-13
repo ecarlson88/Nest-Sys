@@ -1,0 +1,59 @@
+{
+  "Name": "NEST_Panel",
+  "Controls": [
+    {
+      "Name": "led.1",
+      "Type": "Boolean",
+      "Value": false,
+      "String": "false",
+      "Position": 0.0,
+      "Direction": "Read/Write"
+    },
+    {
+      "Name": "meter.1",
+      "Type": "Float",
+      "Value": -120.0,
+      "ValueMin": -120.0,
+      "ValueMax": 20.0,
+      "StringMin": "-120dB",
+      "StringMax": "20.0dB",
+      "String": "-120dB",
+      "Position": 0.0,
+      "Direction": "Read/Write"
+    },
+    {
+      "Name": "momentary.1",
+      "Type": "Boolean",
+      "Value": false,
+      "String": "false",
+      "Position": 0.0,
+      "Direction": "Read/Write"
+    },
+    {
+      "Name": "text.1",
+      "Type": "Text",
+      "String": "",
+      "Direction": "Read/Write"
+    },
+    {
+      "Name": "text.display.1",
+      "Type": "Text",
+      "String": "",
+      "Direction": "Read/Write"
+    },
+    {
+      "Name": "toggle.1",
+      "Type": "Boolean",
+      "Value": false,
+      "String": "false",
+      "Position": 0.0,
+      "Direction": "Read/Write"
+    },
+    {
+      "Name": "trigger.1",
+      "Type": "Trigger",
+      "Value": 0.0,
+      "Direction": "Read/Write"
+    }
+  ]
+}

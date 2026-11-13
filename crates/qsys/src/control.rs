@@ -1,10 +1,14 @@
 //! Named Components and their controls as Component.GetComponents and
 //! Component.GetControls describe them.
 //!
-//! The QRC docs show Name, Value, String, Position and Direction for a
-//! control; Type, ValueMin and ValueMax are expected but not yet seen from a
-//! real Core, so every field but Name is optional and missing ones are
-//! reported (see widget::Note) rather than refused.
+//! Fields as Designer 2026's emulation returns them (tests/data/designer):
+//! every control has Name, Type, Direction and String; Float and Integer add
+//! ValueMin/ValueMax and StringMin/StringMax; Text has no Value, only String;
+//! a Trigger's Value is 0.0 and it has no String. Direction is "Read/Write",
+//! "Read Only" or "Write Only", and Custom Controls' indicators (LED, meter,
+//! display text) are Read/Write too. Script components have controls without
+//! a Type. Every field but Name stays optional; missing ones are reported
+//! (see widget::Note) rather than refused.
 
 use serde_json::Value;
 
@@ -34,6 +38,8 @@ pub enum Kind {
     Trigger,
     Text,
     Number,
+    /// A component's health ("OK", "Fault", ...): read only.
+    Status,
     Unknown,
 }
 
@@ -41,10 +47,11 @@ impl Kind {
     fn of(type_name: Option<&str>, value: Option<&Value>) -> Kind {
         let t = type_name.unwrap_or("").trim().to_ascii_lowercase();
         match t.as_str() {
-            "boolean" | "bool" | "toggle" => return Kind::Boolean,
-            "trigger" | "momentary" => return Kind::Trigger,
-            "text" | "string" => return Kind::Text,
-            "float" | "integer" | "int" | "number" | "knob" | "state" => return Kind::Number,
+            "boolean" => return Kind::Boolean,
+            "trigger" => return Kind::Trigger,
+            "text" => return Kind::Text,
+            "float" | "integer" => return Kind::Number,
+            "status" => return Kind::Status,
             _ => {}
         }
         match value {
@@ -88,6 +95,7 @@ pub struct Control {
     /// The Type field as given, for display.
     pub type_name: Option<String>,
     pub kind: Kind,
+    /// Value, or for a control without one (Text), its String.
     pub value: Value,
     /// The Core's own rendering of the value (e.g. "-12.0dB").
     pub string: Option<String>,
@@ -95,6 +103,9 @@ pub struct Control {
     pub position: Option<f64>,
     pub min: Option<f64>,
     pub max: Option<f64>,
+    /// The ends of the range as the Core renders them (e.g. "-100dB").
+    pub string_min: Option<String>,
+    pub string_max: Option<String>,
     pub direction: Direction,
     pub has_direction: bool,
 }
@@ -103,15 +114,24 @@ impl Control {
     pub fn from_json(v: &Value) -> Option<Control> {
         let type_name = v.get("Type").and_then(Value::as_str);
         let direction = v.get("Direction").and_then(Value::as_str);
+        let string = v.get("String").and_then(Value::as_str).map(str::to_owned);
+        let value = match (v.get("Value"), &string) {
+            (Some(value), _) => value.clone(),
+            (None, Some(s)) => Value::String(s.clone()),
+            (None, None) => Value::Null,
+        };
+        let text = |key| v.get(key).and_then(Value::as_str).map(str::to_owned);
         Some(Control {
             name: v.get("Name")?.as_str()?.to_owned(),
             type_name: type_name.map(str::to_owned),
-            kind: Kind::of(type_name, v.get("Value")),
-            value: v.get("Value").cloned().unwrap_or(Value::Null),
-            string: v.get("String").and_then(Value::as_str).map(str::to_owned),
+            kind: Kind::of(type_name, Some(&value)),
+            value,
+            string,
             position: v.get("Position").and_then(Value::as_f64),
             min: v.get("ValueMin").and_then(Value::as_f64),
             max: v.get("ValueMax").and_then(Value::as_f64),
+            string_min: text("StringMin"),
+            string_max: text("StringMax"),
             direction: Direction::parse(direction),
             has_direction: direction.is_some(),
         })
@@ -152,6 +172,15 @@ mod tests {
         assert_eq!(c.range(), Some((-100.0, 20.0)));
         assert_eq!(c.direction, Direction::ReadWrite);
         assert_eq!(c.display(), "-12.0dB");
+    }
+
+    #[test]
+    fn takes_a_text_controls_value_from_its_string() {
+        let c = Control::from_json(&json!({"Name": "text.1", "Type": "Text", "String": "Hello",
+                                           "Direction": "Read/Write"}))
+        .unwrap();
+        assert_eq!(c.value, json!("Hello"));
+        assert_eq!(c.kind, Kind::Text);
     }
 
     #[test]

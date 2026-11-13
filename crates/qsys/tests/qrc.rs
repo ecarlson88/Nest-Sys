@@ -13,23 +13,15 @@ fn connect(core: &MockCore) -> Qrc<std::net::TcpStream> {
 }
 
 #[test]
-fn discovers_only_prefixed_components_with_their_widgets() {
+fn discovers_only_prefixed_components() {
     let core = MockCore::start();
     let mut q = connect(&core);
     let found = q.list(PREFIX).unwrap();
     let names: Vec<&str> = found.iter().map(|d| d.component.name.as_str()).collect();
-    assert_eq!(names, ["NEST_Zone1", "NEST_Status"]);
-
-    let widgets: Vec<(String, &str)> = found
-        .iter()
-        .flat_map(|d| d.controls.iter().map(|c| (c.name.clone(), pick(c).0.name())))
-        .collect();
-    let widgets: Vec<(&str, &str)> = widgets.iter().map(|(n, w)| (n.as_str(), *w)).collect();
-    assert_eq!(
-        widgets,
-        [("gain", "dial"), ("mute", "toggle"), ("page", "button"), ("source", "dial"), ("msg", "label")]
-    );
-    let gain = &found[0].controls.iter().find(|c| c.name == "gain").unwrap();
+    // Nest_Combo differs in case and is left out.
+    assert_eq!(names, ["NEST_Panel", "NEST_Zone1"]);
+    assert_eq!(found[1].component.kind.as_deref(), Some("gain"));
+    let gain = found[1].controls.iter().find(|c| c.name == "gain").unwrap();
     assert_eq!(pick(gain).0, Widget::Dial { min: -100.0, max: 20.0 });
 }
 
@@ -51,6 +43,8 @@ fn sets_and_reads_back_a_control() {
     q.set("NEST_Zone1", "gain", json!(-20.5)).unwrap();
     q.set("NEST_Zone1", "mute", json!(true)).unwrap();
     assert_eq!(q.get("NEST_Zone1", "gain").unwrap().value, json!(-20.5));
+    q.set("NEST_Panel", "text.1", json!("Hello")).unwrap();
+    assert_eq!(q.get("NEST_Panel", "text.1").unwrap().string.as_deref(), Some("Hello"));
     let mute = q.get("NEST_Zone1", "mute").unwrap();
     assert_eq!(mute.value, json!(true));
     assert_eq!(mute.component.as_deref(), Some("NEST_Zone1"));
@@ -77,12 +71,13 @@ fn polls_current_values_then_only_changes() {
     let core = MockCore::start();
     let mut q = connect(&core);
     q.subscribe("NEST_Zone1", &["gain", "mute"]).unwrap();
+    // As Designer did: the first poll reports every subscribed control.
     let first = q.poll().unwrap();
     assert_eq!(first.len(), 2);
     assert!(q.poll().unwrap().is_empty());
 
     core.change("NEST_Zone1", "gain", json!(-6.0));
-    core.change("NEST_Zone1", "source", json!(3)); // not subscribed
+    core.change("NEST_Zone1", "invert", json!(true)); // not subscribed
     let changes = q.poll().unwrap();
     assert_eq!(changes.len(), 1);
     assert_eq!(changes[0].component.as_deref(), Some("NEST_Zone1"));
