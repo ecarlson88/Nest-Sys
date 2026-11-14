@@ -31,9 +31,16 @@ unit will tell.
   block cloud, an NTP server. The extras are on purpose, to watch nestlocal
   live (ring, hand-over, sleep). No backplate simulator.
 - The patch log shows the framebuffer as 480x640x32 at U-Boot (`bdinfo`).
-- The USB root shell works (the app confirmed uid 0). SSH did not answer
-  at first: port 22 refused on the unit's address; being looked into from
-  the USB shell.
+- The USB root shell works (the app confirmed uid 0).
+- **SSH with "password login off" never starts on the gen 3 [verified]**:
+  unfr0zen writes `PermitRootLogin prohibit-password`
+  (`crates/unfr0zen-core/src/diamond3/rootfs.rs`, `KEY_ONLY_LOGIN`), which
+  the gen 3's OpenSSH 6.0 rejects (`sshd -t`: "unsupported option
+  \"prohibit-password\"", exit 255), so sshd exits at once and port 22
+  refuses. Fixed by hand on the unit with OpenSSH 6.0's name for the same
+  setting, `PermitRootLogin without-password`; patching again with password
+  login off brings the bug back. An upstream bug (v0.5.0 and this fork);
+  not reported or fixed here yet.
 
 **Before it arrives (Windows PC)**
 
