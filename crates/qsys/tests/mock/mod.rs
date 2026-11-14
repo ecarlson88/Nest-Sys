@@ -3,6 +3,9 @@
 //! Other_ Gain were not captured, so it has none); how it
 //! answers Set, Get and change groups is assumed from what Designer printed.
 
+// Shared by qsys's tests and surface's (tests/runner.rs); each uses a part.
+#![allow(dead_code)]
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
@@ -29,6 +32,8 @@ struct State {
     /// Combo boxes' options, which only Get and Poll report.
     choices: BTreeMap<Key, Value>,
     password: Option<String>,
+    /// The connections open, to cut.
+    conns: Vec<TcpStream>,
 }
 
 pub struct MockCore {
@@ -63,6 +68,9 @@ impl MockCore {
         thread::spawn(move || {
             for conn in listener.incoming().flatten() {
                 let st = shared.clone();
+                if let Ok(c) = conn.try_clone() {
+                    st.lock().unwrap().conns.push(c);
+                }
                 thread::spawn(move || serve(conn, st));
             }
         });
@@ -72,6 +80,14 @@ impl MockCore {
     /// Requires Logon with this password before anything else.
     pub fn require_password(&self, password: &str) {
         self.state.lock().unwrap().password = Some(password.into());
+    }
+
+    /// Cuts every connection open, as a Core going away would; new ones
+    /// are still taken.
+    pub fn drop_connections(&self) {
+        for c in self.state.lock().unwrap().conns.drain(..) {
+            let _ = c.shutdown(std::net::Shutdown::Both);
+        }
     }
 
     /// A change made on the Core's side (a UCI, another client, a script).
