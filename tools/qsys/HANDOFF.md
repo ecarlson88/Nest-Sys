@@ -2,6 +2,75 @@
 
 > **New session? Start with [NEXT_SESSION.md](NEXT_SESSION.md)**: where things stand, Erik's decisions and the next steps. Parts of this file below are earlier notes; where they disagree with README.md or the code, those are current.
 
+## Hardware session checklist
+
+For the day the gen 3 arrives. Facts come from this repository (README.md,
+`docs/integrations/`, the app's own text); **[unknown]** marks what only the
+unit will tell.
+
+**Before it arrives (Windows PC)**
+
+- [ ] The unfr0zen app: the latest **upstream release** for Windows
+  (`unfr0zen.exe`, github.com/unfr0zen/unfr0zen/releases). It carries the
+  recovery firmware; building it here would need a firmware build, which
+  Windows cannot do. Its rooting code is the same as this fork's. Its CLI is
+  not on Windows: the window does everything needed.
+- [ ] WSL2 with Ubuntu, for building and copying `nest-surface`: Rust
+  (rustup), then zig 0.16.0 and cargo-zigbuild 0.23.4 as `BUILDING.md` and
+  NEXT_SESSION.md "Tooling notes" say (zig through `pip install
+  ziglang==0.16.0` in a venv works). Check with
+  `sh crates/surface/build-unit.sh` -> `build/nest-surface-armv7`. No
+  Docker needed: that is for the firmware build only.
+- [ ] A micro-USB cable that carries data (charge-only cables are the usual
+  failure). **[unknown]** how to power it on the bench for long runs
+  (Open questions, below).
+- [ ] An SSH key: the app's **Create a key for me** makes an ECDSA P-256
+  key in `~/.ssh/unfr0zen` (Windows side), the type the gen 3's stock
+  OpenSSH 6.0 takes (Ed25519 is not). Copy it into WSL (`~/.ssh`, mode 600)
+  for `install-unit.sh`.
+
+**With the unit (in this order)**
+
+1. [ ] Note the firmware version (in its Settings menu; the exact page
+   **[from memory]**: Technical info) and the serial; tested versions: 5.9.4-5, 6.3-5, 6.4-8, 6.5-14. Ideally
+   keep it off Erik's Nest account.
+2. [ ] Take the display off its base, plug it in, **back up the NAND**
+   (app: Backups -> Back up unit; or the backup offered on the Patch page's
+   Review, which uses one recovery trip for both). 512 MiB with a `.sha256`.
+   Keep it outside the repository; copy it to a second place.
+3. [ ] Patch with the app: on Features, **SSH** with the key (password
+   login off); on Review, under Developer options, **Backplate simulator**
+   for the bench (1H1C with simulated temperatures, so it does not complain off
+   the wall). Nothing else is needed: no MQTT, Matter, Zigbee, Doom.
+   Windows only, if it stops with `ACM interface for 18d1:4ee0 did not
+   appear`: README.md "When something is wrong" has the Device Manager fix.
+4. [ ] Back on its base or bench power, join Wi-Fi from its own menu
+   (Settings -> Network), note its IP, then from WSL:
+   `ssh -i ~/.ssh/unfr0zen root@UNIT`. **[unknown]** whether a current
+   OpenSSH client needs legacy options for OpenSSH 6.0; if it refuses, the
+   error names the algorithm to add (`-o KexAlgorithms=+...` or
+   `-o HostKeyAlgorithms=+...`), and `SSH_OPTS` passes it to
+   `install-unit.sh`.
+5. [ ] Look around before changing anything: `uname -a`, `ps`,
+   `ls /etc/init.d /etc/monit*`, `cat /proc/fb`, `ls -l /dev/fb* /dev/input`,
+   `ls /sys/class/backlight`, `df -h /media/data`, `free`. Save the output
+   for HANDOFF.md, in our own words.
+6. [ ] Copy and run the diagnostics:
+   `SSH_OPTS="-i ~/.ssh/unfr0zen" sh crates/surface/install-unit.sh UNIT CORE`,
+   then on the unit `sh /media/data/nest-surface/nest-surface.sh --diag`.
+   Check the pattern as README.md "On the unit" says (up, L/R, round, colours,
+   ring direction); paste the printed report back into the session.
+7. [ ] The real thing: `sh /media/data/nest-surface/nest-surface.sh` with
+   Designer emulating on the PC (the unit must reach the PC's port 1710:
+   allow it through the Windows firewall). Watch the frame rate, the
+   hand-over (whether nlclient stays dark), and whether the unit suspends
+   after a minute or two untouched **[unknown]**.
+8. [ ] Recovery: confirm that **Restore to unit** with the backup would work
+   (the app verifies the image first), without needing it yet.
+
+A session on Erik's PC (Claude Code there, or `claude remote-control`) can
+run steps 4 to 7 itself; a cloud session can only read pasted output.
+
 Written 2026-11-12. Context for Claude Code working in the repo. Items are marked **[verified]** (read in docs/repos this session), **[from memory]** (recalled, not checked), or **[unknown]** (must be found out on hardware).
 
 ## Goal
