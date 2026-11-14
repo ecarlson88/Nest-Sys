@@ -1,5 +1,6 @@
-//! Running the screen against a Core, whatever shows it: connecting (and
-//! trying again every RETRY_EVERY while the Core cannot be reached),
+//! Running the screen against a Core, whatever shows it: connecting (on a
+//! thread of its own, so the ring and the screen never wait on the network,
+//! and trying again every RETRY_EVERY while the Core cannot be reached),
 //! discovering the design, sending what the ring and click do, following
 //! the Core's changes, keeping the clock and the settings, and drawing.
 //!
@@ -9,6 +10,7 @@
 
 use std::collections::BTreeMap;
 use std::net::TcpStream;
+use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::time::{Duration, Instant};
 
 use chrono::{Datelike, Timelike};
@@ -197,6 +199,8 @@ pub struct Runner {
     button: Button,
     events: Vec<Event>,
     session: Option<Session>,
+    /// A connection being made, on its own thread.
+    connecting: Option<Receiver<qsys::Result<Session>>>,
     /// The screen to come back to after a reconnect, by component.
     last_screen: Option<String>,
     next_try: Instant,
@@ -221,6 +225,7 @@ impl Runner {
             button: Button::default(),
             events: Vec::new(),
             session: None,
+            connecting: None,
             last_screen: None,
             next_try: now,
             trouble: "Starting".into(),
@@ -248,6 +253,16 @@ impl Runner {
         }
     }
 
+    /// Whether a session with the Core is up.
+    pub fn connected(&self) -> bool {
+        self.session.is_some()
+    }
+
+    /// The screen's state, while connected.
+    pub fn app(&self) -> Option<&App> {
+        self.session.as_ref().map(|s| &s.app)
+    }
+
     /// Whether something is moving on screen, so step is wanted again soon.
     pub fn animating(&self) -> bool {
         self.animating
@@ -261,8 +276,8 @@ impl Runner {
         let mut events = std::mem::take(&mut self.events);
         events.extend(self.button.tick(t));
 
-        if self.session.is_none() && Instant::now() >= self.next_try {
-            self.try_connect();
+        if self.session.is_none() {
+            self.connect_step();
         }
 
         if let Some(s) = &mut self.session {
@@ -317,9 +332,33 @@ impl Runner {
         true
     }
 
-    fn try_connect(&mut self) {
+    /// Starts connecting when it is time to, and takes the outcome once
+    /// the thread has it; neither waits.
+    fn connect_step(&mut self) {
+        let outcome = match &self.connecting {
+            None if Instant::now() >= self.next_try => {
+                let (tx, rx) = mpsc::channel();
+                let config = self.config.clone();
+                std::thread::spawn(move || {
+                    let _ = tx.send(connect(&config));
+                });
+                self.connecting = Some(rx);
+                return;
+            }
+            None => return,
+            Some(rx) => match rx.try_recv() {
+                Ok(outcome) => outcome,
+                Err(TryRecvError::Empty) => return,
+                Err(TryRecvError::Disconnected) => Err(std::io::Error::other("connecting failed unexpectedly").into()),
+            },
+        };
+        self.connecting = None;
+        self.take_session(outcome);
+    }
+
+    fn take_session(&mut self, outcome: qsys::Result<Session>) {
         let c = &self.config;
-        match connect(c) {
+        match outcome {
             Ok(mut s) => {
                 println!("connected to {}:{}: {} screens", c.host, c.port, s.app.screens.len());
                 s.app.settings = self.saved.clone();
