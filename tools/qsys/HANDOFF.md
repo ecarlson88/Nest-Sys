@@ -22,6 +22,19 @@ unit will tell.
   the choices as a list with a check mark on the one in force and a teal
   pill on the one the ring is on, DONE at the bottom.
 
+**Erik's unit as patched (2026-11-14)**
+
+- Gen 3, Display-3.7 (diamond3-dvt), i.MX6SoloX; firmware 6.3-5 (kernel
+  4.1.15-6.3-5), on root0. NAND backup taken first.
+- Patched with the upstream Windows release, unfr0zen v0.5.0: SSH (key
+  only, ECDSA), USB root shell, MQTT, Zigbee, Doom, external temperature,
+  block cloud, an NTP server. The extras are on purpose, to watch nestlocal
+  live (ring, hand-over, sleep). No backplate simulator.
+- The patch log shows the framebuffer as 480x640x32 at U-Boot (`bdinfo`).
+- The USB root shell works (the app confirmed uid 0). SSH did not answer
+  at first: port 22 refused on the unit's address; being looked into from
+  the USB shell.
+
 **Before it arrives (Windows PC)**
 
 - [ ] The unfr0zen app: the latest **upstream release** for Windows
