@@ -32,6 +32,13 @@ unit will tell.
   live (ring, hand-over, sleep). No backplate simulator.
 - The patch log shows the framebuffer as 480x640x32 at U-Boot (`bdinfo`).
 - The USB root shell works (the app confirmed uid 0).
+- **`/media/data` is mounted `noexec`** (`rw,sync,nodev,noexec,noatime`;
+  20 MB, almost empty); the root file system is `rw`. Programs go in
+  `/nestlabs/sbin` as unfr0zen's do. The unit has **no `scp` and no SFTP
+  server**: files go over `ssh ... "cat > FILE"` (from Windows, through
+  `cmd /c` so that `<` passes bytes unchanged).
+- `/dev/fb0` is `mxs-lcdif`; four input devices, `event0` to `event3`; one
+  backlight, `1-0063`; 500 MB of memory, about 170 MB free.
 - **SSH with "password login off" never starts on the gen 3 [verified]**:
   unfr0zen writes `PermitRootLogin prohibit-password`
   (`crates/unfr0zen-core/src/diamond3/rootfs.rs`, `KEY_ONLY_LOGIN`), which

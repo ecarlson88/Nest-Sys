@@ -158,8 +158,11 @@ rooted Gen 3 with SSH (unfr0zen's `--ssh`).
    sh crates/surface/build-unit.sh      # -> build/nest-surface-armv7
    ```
 
-2. Copy it to the unit with the Core's address. Nothing on the unit's root
-   file system is changed; everything goes in `/media/data/nest-surface`:
+2. Copy it to the unit with the Core's address. The program goes in
+   `/nestlabs/sbin` on the root file system, beside unfr0zen's own, because
+   `/media/data` is mounted `noexec`; everything else goes in
+   `/media/data/nest-surface`. The unit has no `scp` or SFTP, so the script
+   sends each file through `ssh ... "cat > FILE"`:
 
    ```sh
    sh crates/surface/install-unit.sh UNIT_ADDRESS CORE_ADDRESS

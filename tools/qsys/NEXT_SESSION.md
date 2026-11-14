@@ -36,7 +36,7 @@ the code (its early "Widget mapping (v1)" table, say), the latter are current.
 | `crates/surface/src/device.rs` | Linux only: `/dev/fb0` (two pages, pan), console to graphics, `/dev/input` grabbed (`REL_DIAL`, `KEY_ENTER`), restore on exit. **Written from the Doom port, never run on a unit.** |
 | `crates/surface/src/bin/sim.rs` + `sim.html` | Simulator: serves the face to a browser (mouse, keyboard, phone touch). |
 | `crates/surface/src/bin/nest-surface.rs` | The unit's program: config from `/media/data/nest-surface/config.json`. |
-| `crates/surface/{build-unit.sh,install-unit.sh,rootfs/}` | Cross-build for ARMv7, copy over SSH to `/media/data/nest-surface`, launcher using nlclient's screen hand-over (as Doom's), init script, monit file. |
+| `crates/surface/{build-unit.sh,install-unit.sh,rootfs/}` | Cross-build for ARMv7, copy over SSH (the program to `/nestlabs/sbin`, the rest to `/media/data/nest-surface`), launcher using nlclient's screen hand-over (as Doom's), init script, monit file. |
 | `crates/surface/examples/bench.rs` | Frame timings (desktop: ~0.2-0.5 ms a screen, ~1 ms to lay out for the panel). |
 | `tools/qsys/` | `qrc_discover.py` (+ `--raw`, `--get`, `--set`, `--watch`), `mock_qrc_server.py`, `test_bed.lua` (Text Controller with one of each control), `combo_box.lua`, `HANDOFF.md`, `README.md`. |
 

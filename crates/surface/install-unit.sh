@@ -1,9 +1,11 @@
 #!/bin/sh
-# Copies the control surface to a rooted unit over SSH (unfr0zen --ssh),
-# into /media/data/nest-surface: nest-surface (from build-unit.sh), its
-# launcher, init script and monit file, and config.json with the Core's
-# address when one is given. Nothing on the unit's root file system is
-# changed; README.md has the steps to try it and to start it at boot.
+# Copies the control surface to a rooted unit over SSH (unfr0zen --ssh):
+# nest-surface (from build-unit.sh) to /nestlabs/sbin, beside unfr0zen's own
+# programs, since /media/data is mounted noexec; its launcher, init script
+# and monit file, and config.json with the Core's address when one is
+# given, to /media/data/nest-surface. Only cat is needed on the unit (it
+# has no scp or SFTP). README.md has the steps to try it and to start it at
+# boot.
 #
 #     sh crates/surface/install-unit.sh UNIT_ADDRESS [CORE_ADDRESS]
 #
@@ -24,7 +26,7 @@ put() {  # put LOCAL REMOTE MODE
 }
 
 on_unit "mkdir -p $dir"
-put "$bin" "$dir/nest-surface" 755
+put "$bin" /nestlabs/sbin/nest-surface 755
 put "$root/crates/surface/rootfs/nest-surface.sh" "$dir/nest-surface.sh" 755
 put "$root/crates/surface/rootfs/nest-surface.init" "$dir/nest-surface.init" 755
 put "$root/crates/surface/rootfs/nest-surface.monitrc" "$dir/nest-surface.monitrc" 600

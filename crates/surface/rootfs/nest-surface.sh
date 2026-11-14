@@ -7,19 +7,21 @@
 # nothing while the process in screen.owner, this shell, is alive. Any other
 # nlclient is stopped while the surface runs and started again after.
 #
-# The surface's files are in /media/data/nest-surface: nest-surface, this
-# launcher, config.json (the Core's address) and settings.json. Its log is
+# The program is /nestlabs/sbin/nest-surface, on the root file system as
+# unfr0zen's own are (/media/data is mounted noexec). Its other files are in
+# /media/data/nest-surface: this launcher, config.json (the Core's address)
+# and settings.json. Its log is
 # /tmp/nest-surface.log. Arguments are passed on to nest-surface; with
 # --diag (no Core needed), its report goes to this terminal instead.
-dir=/media/data/nest-surface
+bin=/nestlabs/sbin/nest-surface
 run=/var/run/unfr0zen
 log=/tmp/nest-surface.log
 
 surface() {
     if [ "${1:-}" = --diag ]; then
-        "$dir/nest-surface" "$@" &
+        "$bin" "$@" &
     else
-        "$dir/nest-surface" "$@" >> "$log" 2>&1 &
+        "$bin" "$@" >> "$log" 2>&1 &
     fi
     child=$!
     # Stopped (by monit, init or Ctrl-C), stop the surface, which puts the
