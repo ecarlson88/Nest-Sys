@@ -39,6 +39,22 @@ unit will tell.
   `cmd /c` so that `<` passes bytes unchanged).
 - `/dev/fb0` is `mxs-lcdif`; four input devices, `event0` to `event3`; one
   backlight, `1-0063`; 500 MB of memory, about 170 MB free.
+- **First `--diag` run (2026-11-14) [verified]:** framebuffer 480x640
+  visible, 480x1280 virtual (two pages; nlclient was showing the second,
+  y 640), 32 bits, red 16 / green 8 / blue 0 (XRGB8888), stride 1920, pan
+  step y 1: as `device.rs` assumed. Inputs: `event0` snvs power key
+  (KEY_POWER), `event1` pwm-beeper, `event2` the ring (`REL_DIAL`, both
+  signs), `event3` gpio-keys, the click (`KEY_ENTER`). Backlight 1757 of
+  2047. The program ran from `/nestlabs/sbin` through the launcher's
+  hand-over; turns, clicks and a 0.7 s hold were all read.
+- Frame times on the unit: drawing the pattern ~12 ms, laying out for the
+  turned panel and showing ~19 ms (the desktop: ~1 ms), so about 30 frames
+  a second; the layout is worth speeding up.
+- The ring reports in irregular chunks (about every 30 ms, 5 to 250
+  counts), and a press or touch adds a few counts (±5 to ±12) of jitter.
+  Still to check: counts per full turn (to set `COUNTS_PER_DETENT`, now a
+  guess of 120 from the Doom port), that negative is really clockwise, and
+  the pattern's look (up, L/R, colours, roundness).
 - **SSH with "password login off" never starts on the gen 3 [verified]**:
   unfr0zen writes `PermitRootLogin prohibit-password`
   (`crates/unfr0zen-core/src/diamond3/rootfs.rs`, `KEY_ONLY_LOGIN`), which
