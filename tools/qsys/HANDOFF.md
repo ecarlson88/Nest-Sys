@@ -8,6 +8,20 @@ For the day the gen 3 arrives. Facts come from this repository (README.md,
 `docs/integrations/`, the app's own text); **[unknown]** marks what only the
 unit will tell.
 
+**Seen on Erik's unit (2026-11-14, stock software, before rooting)**
+
+- USB alone powers it, but the stock UI only asks to be put on its wall
+  base; the backplate simulator (step 3) is meant for running off the wall
+  **[not yet verified]**.
+- Stock text entry, a model if the surface ever needs one: a-z laid around
+  the edge, a white dot on the letter the ring has reached; shift, space and
+  delete at the lower right; back, a check mark (enter) and "123" (digits
+  and symbols) along the bottom; the text field in the middle, a teal pill
+  (a lock icon for a password). Erik: "it does work well".
+- Stock choice pages (the clock's 12/24 hour): the current value at the top,
+  the choices as a list with a check mark on the one in force and a teal
+  pill on the one the ring is on, DONE at the bottom.
+
 **Before it arrives (Windows PC)**
 
 - [ ] The unfr0zen app: the latest **upstream release** for Windows
