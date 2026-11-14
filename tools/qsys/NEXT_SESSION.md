@@ -18,7 +18,7 @@ the code (its early "Widget mapping (v1)" table, say), the latter are current.
 - No hardware yet; Erik expects a used Nest Gen 3 within days. Everything so
   far was tested against **Q-SYS Designer's emulation** (by Erik, on Windows)
   and against mocks here. Nothing has run on a Nest.
-- Tests: `cargo test -p qsys -p surface` (81 tests) and
+- Tests: `cargo test -p qsys -p surface` (86 tests) and
   `cargo clippy -p qsys -p surface --locked --all-targets -- -D warnings`,
   both clean. They also pass as 32-bit ARM under `qemu-arm` (below).
 
@@ -103,17 +103,13 @@ the code (its early "Widget mapping (v1)" table, say), the latter are current.
 
 1. ~~**`nest-surface --diag`**~~: done (`src/diag.rs`, README.md "On the
    unit"). First thing to run on the unit.
-2. **Connect off the loop**: `Runner::try_connect` blocks up to 3 s
-   (`Client::connect` timeout) and discovery more; on the unit that freezes
-   the ring. Move connecting to a thread and hand the session back; keep
-   drawing "Connecting..." meanwhile.
-3. **Runner tests** against the Rust mock (`crates/qsys/tests/mock`, which
-   would need to become shareable, e.g. a `mock` feature or a test-support
-   module): connect, Core gone, reconnect to the same screen, settings saved.
-4. **Hardware session checklist** at the top of `HANDOFF.md`: Windows + WSL2
-   Ubuntu for builds and SSH, NAND backup first, ECDSA key and legacy ssh
-   options for the gen 3's OpenSSH 6.0, `--backplate-sim` for the bench, then
-   the first commands (`--diag`).
+2. ~~**Connect off the loop**~~: done; connecting and discovery run on a
+   thread. Still blocking: a Core that is connected but stops answering
+   holds a step for up to 3 s per request (`exchange`) before it counts as
+   lost. Rare; worth doing only if seen.
+3. ~~**Runner tests**~~: done, `crates/surface/tests/runner.rs`, sharing
+   qsys's mock by `#[path]`.
+4. ~~**Hardware session checklist**~~: done, at the top of `HANDOFF.md`.
 5. Optional: keep-awake as nestlocal does (`crates/nestlocal/src/wake.rs`:
    D-Bus `RegisterEntity` with nlsleepd, declining `RequestSleep`), behind an
    off-by-default option.
