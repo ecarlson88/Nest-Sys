@@ -100,8 +100,7 @@ unit will tell.
   login off brings the bug back. An upstream bug, new in upstream #54
   (2026-11-12), where password login off became the app's default. Fixed
   in this fork (writes `without-password`, repairs the old line on a
-  re-patch); the upstream PR text is in `UPSTREAM_SSH_FIX.md`, for Erik to
-  post.
+  re-patch); Erik is reporting it upstream as an issue.
 
 **Before it arrives (Windows PC)**
 
