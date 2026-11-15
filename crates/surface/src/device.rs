@@ -335,6 +335,9 @@ pub struct Backlight {
     before: Option<u32>,
     /// The level last written, if any.
     set: Option<u32>,
+    /// What the driver read back just after that write, which `check`
+    /// compares with (it need not equal what was written).
+    read_back: Option<u32>,
 }
 
 impl Backlight {
@@ -344,7 +347,7 @@ impl Backlight {
         let read = |name: &str| std::fs::read_to_string(dir.join(name)).ok().and_then(|s| s.trim().parse::<u32>().ok());
         let max = read("max_brightness").filter(|&m| m > 0)?;
         let before = read("brightness");
-        Some(Backlight { dir, max, before, set: None })
+        Some(Backlight { dir, max, before, set: None, read_back: None })
     }
 
     fn level(&self) -> Option<u32> {
@@ -353,7 +356,10 @@ impl Backlight {
 
     fn write(&mut self, level: u32) {
         match std::fs::write(self.dir.join("brightness"), format!("{level}\n")) {
-            Ok(()) => self.set = Some(level),
+            Ok(()) => {
+                self.set = Some(level);
+                self.read_back = self.level();
+            }
             Err(e) => eprintln!("{}: {e}", self.dir.display()),
         }
     }
@@ -368,9 +374,9 @@ impl Backlight {
 
     /// Puts back the level set here if something else changed it, saying so.
     pub fn check(&mut self) {
-        let (Some(set), Some(now)) = (self.set, self.level()) else { return };
-        if now != set {
-            eprintln!("backlight: something else set it to {now} (of {}); back to {set}", self.max);
+        let (Some(set), Some(was), Some(now)) = (self.set, self.read_back, self.level()) else { return };
+        if now != was {
+            eprintln!("backlight: something else set it to {now} (of {}; read {was} after writing {set}); back to {set}", self.max);
             self.write(set);
         }
     }
