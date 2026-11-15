@@ -467,7 +467,7 @@ fn control(app: &App, screen: &Screen, item: &Item, mode: Mode, canvas: &mut Can
                 canvas.disc(C, 262.0, 48.0, 0x161616);
                 canvas.ring(C, 262.0, 48.0, 4.0, TRACK);
             }
-            canvas.text_centred(C, 360.0, &shown(c), 28.0, Weight::Regular, 300.0, if c.is_on() { FG } else { DIM });
+            // The light alone shows the state, as a toggle's switch does.
         }
         Widget::Momentary | Widget::Button => {
             header(canvas, &screen.title, &item.label);
