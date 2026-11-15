@@ -51,6 +51,8 @@ unit will tell.
   `nest-surface.sh CORE` on the unit connected to Designer's emulation on
   Erik's PC and worked as intended, ring and click driving it. Lists at 30
   steps a turn and part-steps dropped on press came in with this build.
+  Stopping emulation showed "Connecting…"; starting it again reconnected
+  by itself.
 - Frame times on the unit: drawing the pattern ~12 ms, laying out for the
   turned panel and showing ~19 ms (the desktop: ~1 ms), so about 30 frames
   a second; the layout is worth speeding up.
