@@ -33,11 +33,13 @@ surface() {
 
 read -r keeper _ 2> /dev/null < "$run/keeper.pid"
 if [ -n "$keeper" ] && [ "$keeper" = "$(pidof nlclient)" ]; then
+    echo "nest-surface.sh: nlclient hands over the screen and keeps running" | tee -a "$log"
     echo $$ > "$run/screen.owner"
     surface "$@"
     rm -f "$run/screen.owner"
     exit 0
 fi
+echo "nest-surface.sh: no hand-over from nlclient; stopping it (the thermostat is not running) until this stops" | tee -a "$log"
 monit unmonitor nlclient > /dev/null 2>&1
 for i in 1 2 3 4 5 6 7 8 9 10; do
     pid=$(pidof nlclient) || break

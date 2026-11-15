@@ -52,7 +52,14 @@ unit will tell.
   Erik's PC and worked as intended, ring and click driving it. Lists at 30
   steps a turn and part-steps dropped on press came in with this build.
   Stopping emulation showed "Connecting…"; starting it again reconnected
-  by itself.
+  by itself. The thermostat screen never showed through. Erik: the gain
+  page felt a bit steppy (being narrowed down); the other screens and the
+  ring's feel were fine.
+- **This unit is Erik's house thermostat** (unfr0zen with Home Assistant).
+  Keep surface runs on it short until it is known which way the launcher
+  took the screen: with nlclient's hand-over the heating keeps running;
+  without it nlclient is stopped. The launcher now says which. Sleep and
+  USB-only power are to be tested on a second, sacrificial unit (coming).
 - Frame times on the unit: drawing the pattern ~12 ms, laying out for the
   turned panel and showing ~19 ms (the desktop: ~1 ms), so about 30 frames
   a second; the layout is worth speeding up.
