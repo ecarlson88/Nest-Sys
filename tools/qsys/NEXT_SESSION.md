@@ -137,6 +137,18 @@ address) are entered **on the Nest itself**, with a ring keyboard like
 the stock one (HANDOFF.md describes it); raise the idea upstream first: a
 draft issue is in `UPSTREAM_APPS_ISSUE.md`, **for Erik to post, not us**.
 
+## Later: an accent colour set from Q-SYS (Erik's idea, 2026-11-15)
+
+To brand a unit to a customer's colour, the accent blue should be settable
+from the design, by a dropdown rather than a colour picker. Leads, none
+checked: polls already carry a `Color` field per control (HANDOFF.md, QRC
+facts), never inspected; Erik suggests a Call Sync component's User Button
+colour dropdown (its controls over QRC unknown: `qrc_discover.py --raw`
+would show them); a fallback is a `NEST_` combo box choosing from a fixed
+list of colours. Settled UI choices to keep: no on/off or true/false text
+on toggles or indicators; buttons keep "Press"/"Hold", Settings keeps
+"Helper text: On/Off".
+
 ## Later: power from USB alone (Erik's wish, 2026-11-14)
 
 Erik wants the unit to run from its USB port only, without the base's 24 V
