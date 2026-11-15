@@ -143,8 +143,14 @@ To brand a unit to a customer's colour, the accent blue should be settable
 from the design, by a dropdown rather than a colour picker. Leads, none
 checked: polls already carry a `Color` field per control (HANDOFF.md, QRC
 facts), never inspected; Erik suggests a Call Sync component's User Button
-colour dropdown (its controls over QRC unknown: `qrc_discover.py --raw`
-would show them); a fallback is a `NEST_` combo box choosing from a fixed
+colour dropdown. Call Sync (for syncing mic LEDs and panel accents to call
+status; controls listed by Erik in Designer) has, per state (idle, mute,
+unmute, ringing) and for the user button, a `*.color` String (the
+dropdown) and a `*.color.rgb` String twin, e.g. `user.button.color` and
+`user.button.color.rgb`; not yet read: whether `.rgb` follows the dropdown
+and its format (`qrc_discover.py IP --get Sync.user.button.color.rgb`).
+Open choice: borrow the room's Call Sync colour, or a `NEST_` setting of
+its own; a fallback is a `NEST_` combo box choosing from a fixed
 list of colours. Settled UI choices to keep: no on/off or true/false text
 on toggles or indicators; buttons keep "Press"/"Hold", Settings keeps
 "Helper text: On/Off".
