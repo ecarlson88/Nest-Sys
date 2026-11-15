@@ -131,11 +131,11 @@ one. Doom's wiring is the model (firmware build -> host assets ->
 `patch.rs` `Options::doom` overlay and nestlocal's `-doom` flag -> the
 UNFR0ZEN screen's page in nlclient, `platform/common/nlclient` -> a
 `.request` -> `crates/nestlocal/src/doom.rs` runs the launcher with the
-screen hand-over). Open questions put to Erik: apps built into the exe or
-installed from a bundle file (recommended: bundle, so the Q-SYS app can
-live in its own repo); where Q-SYS's Core address is entered (recommended:
-fields the bundle declares, shown by the exe; on-unit editing later);
-whether to raise the idea upstream first (recommended; Erik posts).
+screen hand-over). Erik decided: apps come as **bundle files**
+(the Q-SYS app can live in its own repo); an app's settings (Q-SYS's Core
+address) are entered **on the Nest itself**, with a ring keyboard like
+the stock one (HANDOFF.md describes it); raise the idea upstream first: a
+draft issue is in `UPSTREAM_APPS_ISSUE.md`, **for Erik to post, not us**.
 
 ## Later: power from USB alone (Erik's wish, 2026-11-14)
 
