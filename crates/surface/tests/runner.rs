@@ -158,7 +158,9 @@ fn turning_a_level_does_not_wait_on_a_slow_core() {
         let t = Instant::now();
         r.input(Input::Turn(1));
         r.step();
-        assert!(t.elapsed() < Duration::from_millis(100), "a step took {:?}", t.elapsed());
+        // Under one answer's 300 ms, with room for drawing on a slow
+        // machine (a debug build under qemu takes ~100 ms a frame).
+        assert!(t.elapsed() < Duration::from_millis(200), "a step took {:?}", t.elapsed());
         std::thread::sleep(Duration::from_millis(30));
     }
     let after = gain(&r);
