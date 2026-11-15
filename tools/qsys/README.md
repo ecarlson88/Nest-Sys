@@ -124,6 +124,12 @@ nothing. In the simulator a list step likewise takes two wheel notches.
 - **Hold** on a screen is a shortcut to the Controls list. There, the ring
   moves and a click opens a component.
 
+- **Leaving:** a hold begun on the Controls list (or on "Connecting…"),
+  kept up for 3 s, leaves the surface: a red arc fills around the edge
+  from the usual hold on, and letting go first cancels. On the unit the
+  program exits and the launcher gives the screen back to the thermostat
+  (the simulator carries on). The hold that opens the list from a screen
+  does not count, however long it is held.
 - **Home screen:** after a while without input (1 min by default) the
   screen shows the time and date, its backlight dimmed to a third; after
   the screen-off delay (5 min by default) the backlight goes off. The first

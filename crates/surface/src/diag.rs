@@ -65,6 +65,10 @@ impl Diag {
                 self.last = "Hold".into();
                 format!("hold (hold {})", self.holds)
             }
+            Event::LongHold => {
+                self.last = "Long hold".into();
+                "long hold (what leaves the surface from its Controls list)".into()
+            }
         }
     }
 

@@ -336,6 +336,11 @@ pub struct App {
     pub network: Vec<(String, String)>,
     /// Showing the home screen after the idle delay.
     pub idle: bool,
+    /// While a hold that began on the Controls list goes on: when it began
+    /// counting (its Hold), and how far it is to leaving (0 to 1).
+    pub exit_hold: Option<(u64, f32)>,
+    /// A long hold on the Controls list asked to leave the surface.
+    pub quit: bool,
     /// The time, kept current by the caller.
     pub clock: Clock,
     /// The click that woke the screen, still to be let go: its release and
@@ -487,8 +492,8 @@ impl App {
     pub fn new(found: Vec<Discovered>, prefix: &str) -> App {
         let screens = found.into_iter().filter_map(|d| screen_of(d, prefix)).collect();
         let mut app = App { screens, screen: 0, focus: 0, mode: Mode::Browse, pressed: None, last_input_ms: 0, flash: None,
-            settings: Settings::default(), network: Vec::new(), idle: false, clock: Clock::default(),
-            waking: false };
+            settings: Settings::default(), network: Vec::new(), idle: false, exit_hold: None, quit: false,
+            clock: Clock::default(), waking: false };
         app.settle();
         app
     }
@@ -555,6 +560,11 @@ impl App {
             if matches!(self.mode, Mode::Edit { .. }) {
                 self.mode = Mode::Browse;
             }
+            return true;
+        }
+        if let Some((at, progress)) = &mut self.exit_hold {
+            let span = (crate::input::LONG_HOLD_MS - crate::input::HOLD_MS) as f32;
+            *progress = (now_ms.saturating_sub(*at) as f32 / span).min(1.0);
             return true;
         }
         if self.flash.as_ref().is_some_and(|f| now_ms >= f.2) {
@@ -644,6 +654,10 @@ impl App {
     /// An input at now_ms (the clock tick() is given).
     pub fn handle(&mut self, ev: Event, now_ms: u64) -> Vec<Set> {
         self.last_input_ms = now_ms;
+        // Letting go ends a hold towards leaving, wherever it began.
+        if ev == Event::Up {
+            self.exit_hold = None;
+        }
         // Idle, the first input only wakes the screen; a click that woke
         // it is not acted on when let go.
         if self.idle {
@@ -684,6 +698,11 @@ impl App {
                         let at = entries.iter().position(|&i| i == focus).unwrap_or(0);
                         self.mode = Mode::Menu { focus: entries[wrap(at, n, entries.len())] };
                     }
+                    // A hold that begins here, held on to a long hold,
+                    // leaves the surface (input::LONG_HOLD_MS); a hold that
+                    // opened this list does not count.
+                    Event::Hold => self.exit_hold = Some((now_ms, 0.0)),
+                    Event::LongHold if self.exit_hold.is_some() => self.quit = true,
                     Event::Click if focus == SETTINGS => self.mode = Mode::Settings { focus: 0 },
                     Event::Click => {
                         self.screen = focus;

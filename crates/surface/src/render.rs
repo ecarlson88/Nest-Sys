@@ -241,6 +241,11 @@ fn menu(app: &App, focus: usize, canvas: &mut Canvas, anim: &mut Anim) {
     let pos = anim.drum("menu", titles.len(), at);
     drum(canvas, &titles, pos, TRACK, FG);
     dots(at, titles.len(), canvas);
+    // A hold here on its way to leaving: the edge fills as it goes on.
+    if let Some((_, progress)) = app.exit_hold {
+        canvas.arc(C, C, EDGE_R + 10.0, 8.0, -90.0, 360.0 * progress, RED);
+        canvas.text_centred(C, 400.0, "Keep holding to exit", 19.0, Weight::Regular, 300.0, RED);
+    }
 }
 
 /// The Settings list, as a drum of its rows.

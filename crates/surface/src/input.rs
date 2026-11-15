@@ -13,6 +13,9 @@ pub const COUNTS_PER_DETENT: i32 = 120;
 pub const LIST_DETENTS: i32 = 2;
 /// How long the click must be held to count as a hold, in milliseconds.
 pub const HOLD_MS: u64 = 700;
+/// How long it must be held for a long hold (leaving the surface from the
+/// Controls list), in milliseconds from the press.
+pub const LONG_HOLD_MS: u64 = 3000;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Event {
@@ -26,6 +29,8 @@ pub enum Event {
     Click,
     /// Held for HOLD_MS (sent once, while still held).
     Hold,
+    /// Held on for LONG_HOLD_MS (sent once, after Hold, while still held).
+    LongHold,
 }
 
 /// Raw ring counts to detents.
@@ -76,6 +81,7 @@ impl ListGear {
 pub struct Button {
     down_at: Option<u64>,
     held: bool,
+    long: bool,
 }
 
 impl Button {
@@ -85,6 +91,7 @@ impl Button {
         }
         self.down_at = Some(now_ms);
         self.held = false;
+        self.long = false;
         vec![Event::Down]
     }
 
@@ -99,12 +106,18 @@ impl Button {
         }
     }
 
-    /// A Hold once the click has been down for HOLD_MS.
+    /// A Hold once the click has been down for HOLD_MS, then a LongHold
+    /// at LONG_HOLD_MS.
     pub fn tick(&mut self, now_ms: u64) -> Option<Event> {
         let at = self.down_at?;
-        if !self.held && now_ms.saturating_sub(at) >= HOLD_MS {
+        let down = now_ms.saturating_sub(at);
+        if !self.held && down >= HOLD_MS {
             self.held = true;
             return Some(Event::Hold);
+        }
+        if self.held && !self.long && down >= LONG_HOLD_MS {
+            self.long = true;
+            return Some(Event::LongHold);
         }
         None
     }
@@ -156,7 +169,9 @@ mod tests {
 
         assert_eq!(b.down(1000), [Event::Down]);
         assert_eq!(b.tick(1000 + HOLD_MS), Some(Event::Hold));
-        assert_eq!(b.tick(5000), None);
+        assert_eq!(b.tick(1000 + LONG_HOLD_MS - 1), None);
+        assert_eq!(b.tick(1000 + LONG_HOLD_MS), Some(Event::LongHold));
+        assert_eq!(b.tick(9000), None);
         assert_eq!(b.up(5000), [Event::Up]);
     }
 

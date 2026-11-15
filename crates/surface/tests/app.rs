@@ -671,3 +671,25 @@ fn going_off_before_home_still_only_wakes_on_the_first_input() {
     assert_eq!(app.backlight(60_000), 0.0);
     assert!(run(&mut app, &[Down, Up, Click]).is_empty(), "the waking click does nothing else");
 }
+
+#[test]
+fn a_long_hold_begun_on_the_controls_list_leaves() {
+    let mut app = design();
+    // A hold on a screen opens the list; held on, it does not leave.
+    run(&mut app, &[Down, Hold, LongHold, Up]);
+    assert!(matches!(app.mode, Mode::Menu { .. }));
+    assert!(!app.quit, "the hold that opened the list does not count");
+    // A hold begun on the list counts down, shown as it goes...
+    run(&mut app, &[Down, Hold]);
+    let began = app.last_input_ms;
+    assert!(app.tick(began + 1150));
+    let (_, progress) = app.exit_hold.unwrap();
+    assert!((progress - 0.5).abs() < 0.01, "{progress}");
+    // ...letting go stops it...
+    run(&mut app, &[Up]);
+    assert_eq!(app.exit_hold, None);
+    assert!(!app.quit);
+    // ...and held to the long hold, it leaves.
+    run(&mut app, &[Down, Hold, LongHold]);
+    assert!(app.quit);
+}

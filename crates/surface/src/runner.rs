@@ -311,6 +311,9 @@ pub struct Runner {
     renderer: Renderer,
     dirty: bool,
     animating: bool,
+    /// A long hold asked to leave (on the Controls list, or while no
+    /// session is up); the front end stops when it sees it.
+    quit: bool,
     /// The face as last drawn.
     pub canvas: Canvas,
 }
@@ -334,6 +337,7 @@ impl Runner {
             renderer: Renderer::new(),
             dirty: true,
             animating: false,
+            quit: false,
             canvas: Canvas::new(FACE),
         }
     }
@@ -375,6 +379,12 @@ impl Runner {
         }
     }
 
+    /// Whether a long hold asked to leave the surface (front ends that can
+    /// stop, the unit's, do; the screen goes back to what was there).
+    pub fn quit(&self) -> bool {
+        self.quit
+    }
+
     /// Whether something is moving on screen, so step is wanted again soon.
     pub fn animating(&self) -> bool {
         self.animating
@@ -389,6 +399,8 @@ impl Runner {
         events.extend(self.button.tick(t));
 
         if self.session.is_none() {
+            // Nothing to show but "Connecting…": a long hold leaves.
+            self.quit |= events.contains(&Event::LongHold);
             self.connect_step();
         }
 
@@ -401,6 +413,7 @@ impl Runner {
             match exchange(&self.config, s, events, t) {
                 Ok(changed) => {
                     self.dirty |= changed;
+                    self.quit |= s.app.quit;
                     if s.app.settings != self.saved {
                         self.saved = s.app.settings.clone();
                         save_settings(&self.config.settings, &self.saved);

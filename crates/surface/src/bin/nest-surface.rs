@@ -131,6 +131,10 @@ mod unit {
             if runner.step() {
                 fb.show(&runner.canvas);
             }
+            if runner.quit() {
+                println!("nest-surface: left by a long hold");
+                break;
+            }
             if let Some(b) = &mut backlight {
                 b.set(runner.backlight());
                 if checked.elapsed() >= std::time::Duration::from_secs(2) {
