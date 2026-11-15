@@ -1570,7 +1570,7 @@ mod tests {
             ("etc/inittab", |f| f.2 = b"::sysinit:/etc/init.d/rcS\n".to_vec(), "USB getty"),
             ("etc/shadow", |f| f.1 = 0o644, "mode 640"),
             ("etc/init.d/rcS", |f| f.2.extend_from_slice(b"${MOUNT} -n -o remount,rw /\n"), "somewhere other than"),
-            ("etc/ssh/sshd_config", |f| f.2 = b"PermitRootLogin without-password\n".to_vec(), "PermitRootLogin no"),
+            ("etc/ssh/sshd_config", |f| f.2 = b"PermitRootLogin forced-commands-only\n".to_vec(), "PermitRootLogin no"),
             ("etc/hosts", |f| f.2.extend_from_slice(HOSTS_BEGIN.as_bytes()), "without its end line"),
         ];
         for (name, change, error) in cases {
@@ -1775,9 +1775,27 @@ mod tests {
         let key = Some(public_key("ssh-ed25519", &[&[1; 32]]));
         assert!(patch(&mut volume, &Options { ssh: true, ssh_key_only: true, ..options() }, false).is_err(), "no key: no way in");
         patch(&mut volume, &Options { ssh: true, ssh_key_only: true, ssh_public_key: key.clone(), ..options() }, false).unwrap();
-        assert!(volume.text("etc/ssh/sshd_config").contains("PermitRootLogin prohibit-password\n"));
+        // The name OpenSSH 6.0, the gen 3's, knows.
+        assert!(volume.text("etc/ssh/sshd_config").contains("PermitRootLogin without-password\n"));
         patch(&mut volume, &Options { ssh: true, ssh_public_key: key, ..options() }, false).unwrap();
         assert!(volume.text("etc/ssh/sshd_config").contains("PermitRootLogin yes\n"), "password login allowed again");
+        patch(&mut volume, &options(), false).unwrap();
+        assert!(volume.text("etc/ssh/sshd_config").contains("PermitRootLogin no\n"), "SSH off: stock");
+    }
+
+    #[test]
+    fn patching_again_repairs_the_key_only_login_sshd_rejected() {
+        // v0.5.0 wrote prohibit-password, which the gen 3's OpenSSH 6.0
+        // refuses, so its sshd never started.
+        let mut volume = FakeVolume::new(stock());
+        let key = Some(public_key("ssh-ed25519", &[&[1; 32]]));
+        let keys_only = Options { ssh: true, ssh_key_only: true, ssh_public_key: key, ..options() };
+        patch(&mut volume, &keys_only, false).unwrap();
+        let config = volume.text("etc/ssh/sshd_config").replace("PermitRootLogin without-password\n", "PermitRootLogin prohibit-password\n");
+        volume.files.get_mut("etc/ssh/sshd_config").unwrap().2 = config.into_bytes();
+        patch(&mut volume, &keys_only, false).unwrap();
+        let config = volume.text("etc/ssh/sshd_config");
+        assert!(config.contains("PermitRootLogin without-password\n") && !config.contains("prohibit-password"), "{config}");
         patch(&mut volume, &options(), false).unwrap();
         assert!(volume.text("etc/ssh/sshd_config").contains("PermitRootLogin no\n"), "SSH off: stock");
     }
