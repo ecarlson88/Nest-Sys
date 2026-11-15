@@ -114,6 +114,16 @@ the code (its early "Widget mapping (v1)" table, say), the latter are current.
    D-Bus `RegisterEntity` with nlsleepd, declining `RequestSleep`), behind an
    off-by-default option.
 
+## Later: power from USB alone (Erik's wish, 2026-11-14)
+
+Erik wants the unit to run from its USB port only, without the base's 24 V
+(C wire). On USB alone the stock UI shows only "reconnect to base", but
+unfr0zen's own screens showed during flashing, so the display and SoC run
+on USB. Likely routes, not yet tried: the backplate simulator
+(`--backplate-sim`, not in the current patch), and our surface owning the
+screen anyway through the hand-over. Unknown: whether nlclient or nlsleepd
+shut down or sleep without a base, and how the battery charges on USB.
+
 ## With hardware (in order)
 
 1. **NAND backup before anything writes to the unit**; keep it outside the
