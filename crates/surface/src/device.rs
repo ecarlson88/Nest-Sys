@@ -415,7 +415,10 @@ pub fn parse_events(bytes: &[u8], ring: &mut Ring, out: &mut Vec<Input>, mut raw
             (EV_REL, REL_X) => ring.feed(-value),
             (EV_KEY, KEY_ENTER | KEY_POWER) => {
                 match value {
-                    1 => out.push(Input::Down),
+                    1 => {
+                        ring.clear();
+                        out.push(Input::Down);
+                    }
                     0 => out.push(Input::Up),
                     _ => {} // auto-repeat
                 }
@@ -576,6 +579,8 @@ mod tests {
         bytes.extend(event(EV_KEY, KEY_ENTER, 1));
         bytes.extend(event(EV_KEY, KEY_ENTER, 2));
         bytes.extend(event(EV_KEY, KEY_ENTER, 0));
+        // The press dropped the half detent: this half makes none, and is
+        // left to take from the two the other way after it.
         bytes.extend(event(EV_REL, REL_DIAL, -60));
         bytes.extend(event(EV_REL, REL_X, -240));
         bytes.extend(event(0x03, 0x00, 5)); // something else
@@ -584,7 +589,7 @@ mod tests {
         let mut out = Vec::new();
         let mut raw = Vec::new();
         parse_events(&bytes, &mut ring, &mut out, Some(&mut raw));
-        assert_eq!(out, [Input::Turn(1), Input::Down, Input::Up, Input::Turn(1), Input::Turn(-2)]);
+        assert_eq!(out, [Input::Turn(1), Input::Down, Input::Up, Input::Turn(-1)]);
         // All but the EV_SYN, as they came.
         assert_eq!(raw.len(), 8);
         assert_eq!(raw[0], RawEvent { kind: EV_REL, code: REL_DIAL, value: -120 });

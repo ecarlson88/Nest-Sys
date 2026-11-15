@@ -91,6 +91,12 @@ To use a phone, start the simulator with `--listen 0.0.0.0:8480` and open
 let the simulator through its firewall). On a touch screen the grey ring is
 wider, to put a thumb on, and each detent buzzes where the phone can.
 
+The unit's ring has 60 detents a turn. Levels and numbers move a step a
+detent; lists (the Controls list, Settings, a screen's controls, a combo
+box's choices) a step every two detents, 30 a turn. A press drops any part
+of a step turned before it, so the ring's slight give when pressed adds
+nothing. In the simulator a list step likewise takes two wheel notches.
+
 - **A Gain component** is a volume knob: the ring sets the level as it
   turns, shown as 0-100% of the gain's range, 1% a detent, a click mutes or unmutes, a hold opens the **Controls** list.
   While muted (red), the first turn unmutes without changing the level.

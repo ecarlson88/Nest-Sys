@@ -614,3 +614,17 @@ fn only_a_toggle_named_mute_folds() {
     }], PREFIX);
     assert!(app.current().unwrap().items.iter().all(|i| i.mute.is_none() && !i.folded));
 }
+
+#[test]
+fn lists_scroll_and_levels_do_not() {
+    let mut app = design();
+    open(&mut app, "Zone1");
+    assert!(matches!(app.current().unwrap().layout, Layout::Volume { .. }));
+    assert!(!app.turns_scroll_a_list(), "a volume knob takes every detent");
+    open(&mut app, "Panel");
+    assert!(app.turns_scroll_a_list(), "moving between a screen's controls");
+    open(&mut app, "Combo");
+    assert!(app.turns_scroll_a_list(), "a combo box's choices");
+    run(&mut app, &[Down, Hold, Up]);
+    assert!(app.turns_scroll_a_list(), "the Controls list");
+}

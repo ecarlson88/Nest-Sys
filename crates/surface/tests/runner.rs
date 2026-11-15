@@ -87,9 +87,9 @@ fn comes_back_to_the_same_screen_when_the_core_returns() {
     let core = MockCore::start();
     let mut r = runner(core.port, &settings_file("reconnects"));
     step_until(&mut r, "connected", Runner::connected);
-    // The list, one down, opened: the second screen.
+    // The list, one down (two detents a step), opened: the second screen.
     hold(&mut r);
-    inputs(&mut r, &[Input::Turn(1), Input::Down, Input::Up]);
+    inputs(&mut r, &[Input::Turn(2), Input::Down, Input::Up]);
     assert_eq!(screen_name(&r).as_deref(), Some("NEST_Zone1"));
 
     core.drop_connections();
@@ -107,7 +107,7 @@ fn keeps_settings_chosen_on_the_screen() {
     assert!(load_settings(file.to_str().unwrap()).hints, "helper text is on until switched off");
     // The list, back one to Settings, its first row: helper text off.
     hold(&mut r);
-    inputs(&mut r, &[Input::Turn(-1), Input::Down, Input::Up]);
+    inputs(&mut r, &[Input::Turn(-2), Input::Down, Input::Up]);
     assert_eq!(r.app().unwrap().mode, Mode::Settings { focus: 0 });
     inputs(&mut r, &[Input::Down, Input::Up]);
     assert!(!load_settings(file.to_str().unwrap()).hints, "saved as soon as chosen");

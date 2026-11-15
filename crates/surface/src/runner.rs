@@ -19,7 +19,7 @@ use serde_json::Value;
 
 use crate::app::{App, Clock, Set, Settings};
 use crate::canvas::{Canvas, FACE};
-use crate::input::{Button, Event};
+use crate::input::{Button, Event, ListGear};
 use crate::render::{status, Renderer};
 
 const POLL_EVERY: Duration = Duration::from_millis(200);
@@ -81,6 +81,8 @@ struct Session {
     app: App,
     /// The Core's last EngineStatus params (design name, state, ...).
     engine: Value,
+    /// Turns to steps where the ring moves through a list.
+    gear: ListGear,
 }
 
 /// What the Network page shows.
@@ -150,7 +152,7 @@ fn connect(c: &Config) -> qsys::Result<Session> {
         let names: Vec<&str> = controls.iter().map(String::as_str).collect();
         q.subscribe(&component, &names)?;
     }
-    let mut s = Session { q, app, engine: Value::Null };
+    let mut s = Session { q, app, engine: Value::Null, gear: ListGear::default() };
     take_engine_status(&mut s);
     s.app.network = network_rows(c, &s);
     Ok(s)
@@ -167,7 +169,18 @@ fn exchange(s: &mut Session, events: Vec<Event>, t: u64, poll: bool, noop: bool)
     let mut dirty = s.app.tick(t);
     // A dial's turns are sent as one value per round.
     let mut sets: BTreeMap<(String, String), Set> = BTreeMap::new();
-    for ev in events {
+    for mut ev in events {
+        match ev {
+            Event::Down => s.gear.clear(),
+            Event::Turn(n) if s.app.turns_scroll_a_list() => match s.gear.feed(n) {
+                0 => {
+                    dirty = true;
+                    continue;
+                }
+                steps => ev = Event::Turn(steps),
+            },
+            _ => {}
+        }
         for set in s.app.handle(ev, t) {
             sets.insert((set.component.clone(), set.control.clone()), set);
         }

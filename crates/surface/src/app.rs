@@ -557,6 +557,27 @@ impl App {
         }
     }
 
+    /// Whether a turn now moves through a list (the Controls list, Settings,
+    /// a screen's controls, a combo box's choices) rather than a level or a
+    /// number: lists take LIST_DETENTS detents a step (input::ListGear).
+    pub fn turns_scroll_a_list(&self) -> bool {
+        if self.idle {
+            return false;
+        }
+        match self.mode {
+            Mode::Menu { .. } | Mode::Settings { .. } | Mode::Network => true,
+            Mode::Edit { .. } => self
+                .screens
+                .get(self.screen)
+                .and_then(|s| s.items.get(self.focus))
+                .is_some_and(|i| i.mute.is_none() && matches!(i.widget, Widget::Picker { .. })),
+            Mode::Browse => match self.screens.get(self.screen).map(|s| &s.layout) {
+                Some(Layout::Volume { .. }) => false,
+                Some(Layout::Selector { .. } | Layout::Controls) | None => true,
+            },
+        }
+    }
+
     /// An input at now_ms (the clock tick() is given).
     pub fn handle(&mut self, ev: Event, now_ms: u64) -> Vec<Set> {
         self.last_input_ms = now_ms;
