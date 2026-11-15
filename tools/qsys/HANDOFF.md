@@ -338,6 +338,26 @@ What the code and docs here say about it:
   setup screens, presumably), and whether anything watchdogs nlclient or
   the unit. Find out on hardware (`ps`, `/etc/init.d`, `/etc/monit*`).
 
+## Gen 3 hardware (a published teardown, 2026-11-15)
+
+From frdmtoplay.com's "Nest Thermostat V3 teardown", checked against the
+unit where we can:
+
+- SoC: Freescale MCIMX6X3, an i.MX6 SoloX (**matches** the unfr0zen log:
+  "i.MX6SoloX rev 1.3"). **[from memory]** One Cortex-A9 application core
+  plus a Cortex-M4; so extra threads do not speed up drawing, drawing less
+  does (dirty regions, a cheaper turned layout).
+- RAM: Elpida, 4 Gbit = 512 MB (**matches** `free`: 500 MB). NAND: Micron
+  MT29F4G08, 4 Gbit = 512 MiB (**matches** the backup).
+- Radios: Silicon Labs EM3581 (802.15.4, Zigbee/Thread; **matches**
+  unfr0zen) with a Skyworks SKY66109 front end; a Murata Wi-Fi/Bluetooth
+  module, "potentially" a Cypress CYW4339; a Dialog DA14580 (Bluetooth LE).
+- An STM32L151 the teardown guesses is the LCD driver; on the unit the
+  i.MX's own `mxs-lcdif` drives the panel, so its role is unknown.
+- Four test points that may be a UART, and unpopulated 10- and 14-pin
+  headers: a possible serial console for the sacrificial unit.
+- Not covered: the sensors, the ring's encoder, power and battery.
+
 ## Hardware decision: keep the stock stack, or go "nuclear"
 
 Once the surface runs on a unit, judge the stock route (unfr0zen + the OEM
