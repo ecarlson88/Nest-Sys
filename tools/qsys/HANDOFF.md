@@ -53,9 +53,10 @@ unit will tell.
 - The ring reports in irregular chunks (about every 30 ms, 5 to 250
   counts), and a press or touch adds a few counts (±5 to ±12) of jitter.
   **Erik checked: the pattern was right (upright, not mirrored, colours in
-  order, round), and clockwise counts up, anticlockwise down.** Still to
-  check: counts per full turn, to set `COUNTS_PER_DETENT` (now a guess of
-  120 from the Doom port).
+  order, round), and clockwise counts up, anticlockwise down.** **One full turn
+  of the ring is 60 detents of 120 counts (7200 counts), 6 degrees a
+  detent** (Erik, `--diag`): `COUNTS_PER_DETENT` = 120 holds, and the
+  diagnostics' marker (6 degrees a detent) follows the ring one to one.
 - **SSH with "password login off" never starts on the gen 3 [verified]**:
   unfr0zen writes `PermitRootLogin prohibit-password`
   (`crates/unfr0zen-core/src/diamond3/rootfs.rs`, `KEY_ONLY_LOGIN`), which
