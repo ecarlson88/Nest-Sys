@@ -77,8 +77,11 @@ unit will tell.
   \"prohibit-password\"", exit 255), so sshd exits at once and port 22
   refuses. Fixed by hand on the unit with OpenSSH 6.0's name for the same
   setting, `PermitRootLogin without-password`; patching again with password
-  login off brings the bug back. An upstream bug (v0.5.0 and this fork);
-  not reported or fixed here yet.
+  login off brings the bug back. An upstream bug, new in upstream #54
+  (2026-11-12), where password login off became the app's default. Fixed
+  in this fork (writes `without-password`, repairs the old line on a
+  re-patch); the upstream PR text is in `UPSTREAM_SSH_FIX.md`, for Erik to
+  post.
 
 **Before it arrives (Windows PC)**
 
