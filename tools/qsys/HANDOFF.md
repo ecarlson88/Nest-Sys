@@ -65,6 +65,16 @@ unit will tell.
   reboot); the start script's checks (`$CHECK`, `unlocked`) both pass. Cause
   not found yet; being re-checked after some hours. A monit rule restarting
   sshd would be the robust fix once the cause is known.
+- **Sensors (2026-11-15):** the kernel knows only `lm3695` (backlight,
+  i2c-1 0x63) and `pfuze200` (PMIC, i2c-3 0x08) on I2C, so proximity and
+  ambient light are not kernel devices; probably behind a microcontroller
+  (the teardown's STM32?) talking to nlclient over serial: unconfirmed. An
+  IIO ADC `2284000.adc` has four unexplained channels (`in_voltage0..3_raw`);
+  the ring is `2280000.adc`. Being probed: the serial ports nlclient holds,
+  and whether an ADC channel follows light or a hand.
+- The backlight driver logs "Setting ramp_rise_time 250 msec / ramp_fall_time
+  2000 msec" on every write; the first backlight build rewrote it every 2 s
+  (its check), now compared with what the driver reads back.
 - **This unit is Erik's house thermostat** (unfr0zen with Home Assistant).
   Keep surface runs on it short until it is known which way the launcher
   took the screen: with nlclient's hand-over the heating keeps running;
