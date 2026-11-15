@@ -55,6 +55,16 @@ unit will tell.
   by itself. The thermostat screen never showed through. Erik: the gain
   page felt a bit steppy (being narrowed down); the other screens and the
   ring's feel were fine.
+- **On USB power alone, off its base (2026-11-15) [verified by Erik]:** the
+  surface took the screen over the stock "reconnect to base" message and
+  worked, `--diag` and against Designer. With the Core moved off the main
+  loop, the gain page now looks smooth. Whether it sleeps on USB: being
+  watched.
+- SSH was found not running after ~8 h of uptime although its config was
+  right and it had started at boot (`Test-NetConnection` good right after a
+  reboot); the start script's checks (`$CHECK`, `unlocked`) both pass. Cause
+  not found yet; being re-checked after some hours. A monit rule restarting
+  sshd would be the robust fix once the cause is known.
 - **This unit is Erik's house thermostat** (unfr0zen with Home Assistant).
   Keep surface runs on it short until it is known which way the launcher
   took the screen: with nlclient's hand-over the heating keeps running;
