@@ -1,6 +1,8 @@
 //! Running the screen against a Core, whatever shows it: connecting (on a
-//! thread of its own, so the ring and the screen never wait on the network,
-//! and trying again every RETRY_EVERY while the Core cannot be reached),
+//! thread of its own, and trying again every RETRY_EVERY while the Core
+//! cannot be reached), then talking to it from another thread (sending what
+//! the ring sets, polling, keeping the connection alive), so that the ring
+//! and the screen never wait on the network,
 //! discovering the design, sending what the ring and click do, following
 //! the Core's changes, keeping the clock and the settings, and drawing.
 //!
@@ -8,13 +10,13 @@
 //! in the ring's turns and the click's presses and shows [`Runner::canvas`]
 //! whenever [`Runner::step`] says it holds a new frame.
 
-use std::collections::BTreeMap;
-use std::net::TcpStream;
-use std::sync::mpsc::{self, Receiver, TryRecvError};
+use std::collections::{BTreeMap, HashMap};
+use std::net::{IpAddr, TcpStream};
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender, TryRecvError};
 use std::time::{Duration, Instant};
 
 use chrono::{Datelike, Timelike};
-use qsys::{Client, Qrc, Transport, DEFAULT_PORT, PREFIX};
+use qsys::{Change, Client, Qrc, Transport, DEFAULT_PORT, PREFIX};
 use serde_json::Value;
 
 use crate::app::{App, Clock, Set, Settings};
@@ -25,6 +27,11 @@ use crate::render::{status, Renderer};
 const POLL_EVERY: Duration = Duration::from_millis(200);
 const NOOP_EVERY: Duration = Duration::from_secs(20);
 const RETRY_EVERY: Duration = Duration::from_secs(2);
+/// For this long after the ring sets a control, the Core's reports of it
+/// are not shown: they can be of a value set before, still on its way
+/// (the unit's Wi-Fi round trip alone can be 100 ms), and would pull the
+/// level back while it turns.
+const ECHO_MS: u64 = 800;
 
 /// Where the Core is and how to reach it, and where settings are kept.
 #[derive(Clone, Debug)]
@@ -75,21 +82,37 @@ pub enum Input {
     Up,
 }
 
+/// What the Core's thread reports to the main loop.
+enum Report {
+    Changes(Vec<Change>),
+    /// The Core's EngineStatus params (design name, state, ...).
+    Engine(Value),
+    /// The connection is gone, and why; the thread has ended.
+    Lost(String),
+}
+
 /// A connection to the Core and the screen built from what it reported.
+/// The connection itself belongs to its thread (`talk`).
 struct Session {
-    q: Qrc<TcpStream>,
     app: App,
     /// The Core's last EngineStatus params (design name, state, ...).
     engine: Value,
+    /// This unit's address on the connection, for the Network page.
+    local: Option<IpAddr>,
     /// Turns to steps where the ring moves through a list.
     gear: ListGear,
+    /// Values for the Core's thread to send.
+    sets: Sender<Vec<Set>>,
+    reports: Receiver<Report>,
+    /// When the ring last set each control, by (component, control).
+    recent: HashMap<(String, String), u64>,
 }
 
 /// What the Network page shows.
 fn network_rows(c: &Config, s: &Session) -> Vec<(String, String)> {
     let mut rows = vec![("Core".to_owned(), format!("{}:{}", c.host, c.port))];
-    if let Ok(local) = s.q.client.get_ref().local_addr() {
-        rows.push(("This unit".into(), local.ip().to_string()));
+    if let Some(local) = s.local {
+        rows.push(("This unit".into(), local.to_string()));
     }
     if let Some(design) = s.engine.get("DesignName").and_then(Value::as_str) {
         let emulated = s.engine.get("IsEmulator").and_then(Value::as_bool) == Some(true);
@@ -101,17 +124,14 @@ fn network_rows(c: &Config, s: &Session) -> Vec<(String, String)> {
     rows
 }
 
-/// Takes the Core's unasked messages, keeping its EngineStatus; returns
-/// whether that changed.
-fn take_engine_status(s: &mut Session) -> bool {
-    let mut changed = false;
-    for m in s.q.client.take_notifications() {
-        if m.get("method").and_then(Value::as_str) == Some("EngineStatus") {
-            s.engine = m.get("params").cloned().unwrap_or(Value::Null);
-            changed = true;
-        }
-    }
-    changed
+/// The latest EngineStatus among the Core's unasked messages, if any.
+fn engine_status(q: &mut Qrc<TcpStream>) -> Option<Value> {
+    q.client
+        .take_notifications()
+        .into_iter()
+        .filter(|m| m.get("method").and_then(Value::as_str) == Some("EngineStatus"))
+        .map(|m| m.get("params").cloned().unwrap_or(Value::Null))
+        .next_back()
 }
 
 /// The local time as the home screen shows it.
@@ -141,7 +161,8 @@ pub fn save_settings(path: &str, settings: &Settings) {
     }
 }
 
-/// Connects, discovers the design and follows its controls.
+/// Connects, discovers the design and follows its controls, then hands
+/// the connection to a thread of its own.
 fn connect(c: &Config) -> qsys::Result<Session> {
     let mut q = Qrc::new(Client::connect(&c.host, c.port, Duration::from_secs(3))?);
     if let Some(user) = &c.user {
@@ -152,8 +173,12 @@ fn connect(c: &Config) -> qsys::Result<Session> {
         let names: Vec<&str> = controls.iter().map(String::as_str).collect();
         q.subscribe(&component, &names)?;
     }
-    let mut s = Session { q, app, engine: Value::Null, gear: ListGear::default() };
-    take_engine_status(&mut s);
+    let engine = engine_status(&mut q).unwrap_or(Value::Null);
+    let local = q.client.get_ref().local_addr().ok().map(|a| a.ip());
+    let (sets, to_send) = mpsc::channel();
+    let (report, reports) = mpsc::channel();
+    std::thread::spawn(move || talk(q, to_send, report));
+    let mut s = Session { app, engine, local, gear: ListGear::default(), sets, reports, recent: HashMap::new() };
     s.app.network = network_rows(c, &s);
     Ok(s)
 }
@@ -164,8 +189,57 @@ fn lost(e: &qsys::Error) -> bool {
     !matches!(e, qsys::Error::Rpc { .. })
 }
 
-/// One round with the Core: the inputs, the values to send, the changes.
-fn exchange(s: &mut Session, events: Vec<Event>, t: u64, poll: bool, noop: bool) -> qsys::Result<bool> {
+/// The Core's thread: sends the values it is given (the latest of each
+/// control, when several wait), polls every POLL_EVERY and keeps the
+/// connection alive, reporting what comes back. Ends when the connection
+/// is lost, or when the session is dropped.
+fn talk(mut q: Qrc<TcpStream>, to_send: Receiver<Vec<Set>>, report: Sender<Report>) {
+    let mut last_poll = Instant::now() - POLL_EVERY;
+    let mut last_noop = Instant::now();
+    let result: qsys::Result<()> = (|| loop {
+        let mut pending: BTreeMap<(String, String), Set> = BTreeMap::new();
+        match to_send.recv_timeout(POLL_EVERY.saturating_sub(last_poll.elapsed())) {
+            Ok(sets) => {
+                for set in sets.into_iter().chain(to_send.try_iter().flatten()) {
+                    pending.insert((set.component.clone(), set.control.clone()), set);
+                }
+            }
+            Err(RecvTimeoutError::Timeout) => {}
+            Err(RecvTimeoutError::Disconnected) => return Ok(()),
+        }
+        for set in pending.into_values() {
+            if let Err(e) = q.set(&set.component, &set.control, set.value) {
+                if lost(&e) {
+                    return Err(e);
+                }
+                eprintln!("{}.{}: {e}", set.component, set.control);
+            }
+        }
+        if last_poll.elapsed() >= POLL_EVERY {
+            last_poll = Instant::now();
+            let changes = q.poll()?;
+            if !changes.is_empty() && report.send(Report::Changes(changes)).is_err() {
+                return Ok(());
+            }
+        }
+        if last_noop.elapsed() >= NOOP_EVERY {
+            last_noop = Instant::now();
+            q.client.noop()?;
+        }
+        if let Some(engine) = engine_status(&mut q) {
+            if report.send(Report::Engine(engine)).is_err() {
+                return Ok(());
+            }
+        }
+    })();
+    if let Err(e) = result {
+        let _ = report.send(Report::Lost(e.to_string()));
+    }
+}
+
+/// One round: the inputs, the values they set (handed to the Core's
+/// thread), and what that thread reported. Err if the Core is lost.
+fn exchange(c: &Config, s: &mut Session, events: Vec<Event>, t: u64) -> Result<bool, String> {
     let mut dirty = s.app.tick(t);
     // A dial's turns are sent as one value per round.
     let mut sets: BTreeMap<(String, String), Set> = BTreeMap::new();
@@ -186,24 +260,36 @@ fn exchange(s: &mut Session, events: Vec<Event>, t: u64, poll: bool, noop: bool)
         }
         dirty = true;
     }
-    for set in sets.into_values() {
-        if let Err(e) = s.q.set(&set.component, &set.control, set.value) {
-            if lost(&e) {
-                return Err(e);
+    if !sets.is_empty() {
+        for key in sets.keys() {
+            s.recent.insert(key.clone(), t);
+        }
+        if s.sets.send(sets.into_values().collect()).is_err() {
+            return Err("the connection to the Core ended".into());
+        }
+    }
+    s.recent.retain(|_, at| t.saturating_sub(*at) < ECHO_MS);
+    loop {
+        match s.reports.try_recv() {
+            Ok(Report::Changes(changes)) => {
+                for ch in changes {
+                    let key = (ch.component.clone().unwrap_or_default(), ch.name.clone());
+                    if !s.recent.contains_key(&key) {
+                        s.app.apply(&ch);
+                        dirty = true;
+                    }
+                }
             }
-            eprintln!("{}.{}: {e}", set.component, set.control);
+            Ok(Report::Engine(engine)) => {
+                s.engine = engine;
+                s.app.network = network_rows(c, s);
+                dirty = true;
+            }
+            Ok(Report::Lost(why)) => return Err(why),
+            Err(TryRecvError::Empty) => return Ok(dirty),
+            Err(TryRecvError::Disconnected) => return Err("the connection to the Core ended".into()),
         }
     }
-    if poll {
-        for change in s.q.poll()? {
-            s.app.apply(&change);
-            dirty = true;
-        }
-    }
-    if noop {
-        s.q.client.noop()?;
-    }
-    Ok(dirty)
 }
 
 pub struct Runner {
@@ -218,8 +304,6 @@ pub struct Runner {
     last_screen: Option<String>,
     next_try: Instant,
     trouble: String,
-    last_poll: Instant,
-    last_noop: Instant,
     saved: Settings,
     renderer: Renderer,
     dirty: bool,
@@ -242,8 +326,6 @@ impl Runner {
             last_screen: None,
             next_try: now,
             trouble: "Starting".into(),
-            last_poll: now,
-            last_noop: now,
             saved,
             renderer: Renderer::new(),
             dirty: true,
@@ -294,26 +376,14 @@ impl Runner {
         }
 
         if let Some(s) = &mut self.session {
-            let poll = self.last_poll.elapsed() >= POLL_EVERY;
-            let noop = self.last_noop.elapsed() >= NOOP_EVERY;
-            if poll {
-                self.last_poll = Instant::now();
-            }
-            if noop {
-                self.last_noop = Instant::now();
-            }
             let clock = clock_now();
             if s.app.clock != clock {
                 s.app.clock = clock;
                 self.dirty |= s.app.idle;
             }
-            match exchange(s, events, t, poll, noop) {
+            match exchange(&self.config, s, events, t) {
                 Ok(changed) => {
                     self.dirty |= changed;
-                    if take_engine_status(s) {
-                        s.app.network = network_rows(&self.config, s);
-                        self.dirty = true;
-                    }
                     if s.app.settings != self.saved {
                         self.saved = s.app.settings.clone();
                         save_settings(&self.config.settings, &self.saved);
@@ -322,7 +392,7 @@ impl Runner {
                 Err(e) => {
                     eprintln!("lost the Core: {e}; reconnecting");
                     self.last_screen = s.app.current().map(|sc| sc.component.name.clone());
-                    self.trouble = e.to_string();
+                    self.trouble = e;
                     self.session = None;
                     self.next_try = Instant::now() + RETRY_EVERY / 2;
                     self.dirty = true;
@@ -382,8 +452,6 @@ impl Runner {
                     }
                 }
                 self.session = Some(s);
-                self.last_poll = Instant::now() - POLL_EVERY;
-                self.last_noop = Instant::now();
             }
             Err(e) => {
                 let why = e.to_string();

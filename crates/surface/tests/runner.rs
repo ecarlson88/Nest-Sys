@@ -136,3 +136,40 @@ fn keeps_stepping_while_a_core_does_not_answer() {
     }
     assert!(!r.connected());
 }
+
+#[test]
+fn turning_a_level_does_not_wait_on_a_slow_core() {
+    let core = MockCore::start();
+    let mut r = runner(core.port, &settings_file("slow"));
+    step_until(&mut r, "connected", Runner::connected);
+    // The list, one down: Zone1's volume.
+    hold(&mut r);
+    inputs(&mut r, &[Input::Turn(2), Input::Down, Input::Up]);
+    assert_eq!(screen_name(&r).as_deref(), Some("NEST_Zone1"));
+    let gain = |r: &Runner| {
+        let zone = r.app().unwrap().current().unwrap();
+        zone.items.iter().find(|i| i.control.name == "gain").unwrap().control.value.as_f64().unwrap()
+    };
+    let before = gain(&r);
+
+    // Each answer now takes 300 ms, as a slow Wi-Fi round trip would.
+    core.slow_down(Duration::from_millis(300));
+    for _ in 0..10 {
+        let t = Instant::now();
+        r.input(Input::Turn(1));
+        r.step();
+        assert!(t.elapsed() < Duration::from_millis(100), "a step took {:?}", t.elapsed());
+        std::thread::sleep(Duration::from_millis(30));
+    }
+    let after = gain(&r);
+    assert!(after > before, "the level moved at once on screen: {before} -> {after}");
+    // The Core gets the latest value, and its late echoes of the earlier
+    // ones never pull the level back on screen.
+    step_until(&mut r, "the Core has the level", |_| core.value("NEST_Zone1", "gain").as_f64() == Some(after));
+    let until = Instant::now() + Duration::from_secs(2);
+    while Instant::now() < until {
+        r.step();
+        assert_eq!(gain(&r), after);
+        std::thread::sleep(Duration::from_millis(20));
+    }
+}

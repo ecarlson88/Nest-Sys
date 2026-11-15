@@ -34,6 +34,8 @@ struct State {
     password: Option<String>,
     /// The connections open, to cut.
     conns: Vec<TcpStream>,
+    /// How long each answer takes, as over a slow network.
+    delay: std::time::Duration,
 }
 
 pub struct MockCore {
@@ -80,6 +82,16 @@ impl MockCore {
     /// Requires Logon with this password before anything else.
     pub fn require_password(&self, password: &str) {
         self.state.lock().unwrap().password = Some(password.into());
+    }
+
+    /// Makes every answer from now on take this long.
+    pub fn slow_down(&self, delay: std::time::Duration) {
+        self.state.lock().unwrap().delay = delay;
+    }
+
+    /// A control's value as the Core holds it.
+    pub fn value(&self, component: &str, control: &str) -> Value {
+        self.state.lock().unwrap().controls[&(component.to_owned(), control.to_owned())]["Value"].clone()
     }
 
     /// Cuts every connection open, as a Core going away would; new ones
@@ -157,6 +169,8 @@ fn serve(mut conn: TcpStream, state: Arc<Mutex<State>>) {
             let frame: Vec<u8> = buf.drain(..=end).collect();
             let msg: Value = serde_json::from_slice(&frame[..end]).unwrap();
             let Some(id) = msg.get("id").cloned() else { continue };
+            let delay = state.lock().unwrap().delay;
+            thread::sleep(delay);
             let reply = match dispatch(&mut state.lock().unwrap(), &msg, &mut logged_on) {
                 Ok(result) => json!({"jsonrpc": "2.0", "id": id, "result": result}),
                 Err((code, message)) => json!({"jsonrpc": "2.0", "id": id,
