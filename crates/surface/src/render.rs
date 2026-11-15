@@ -64,9 +64,20 @@ struct Drum {
     pos: f32,
 }
 
+/// How quickly an edge arc (a level, a dial, a meter) glides to a new
+/// value: the time for it to cover 63% of the way.
+const EDGE_TAU_S: f32 = 0.06;
+
+/// Where an edge arc has got to, as a fraction of its sweep.
+struct Glide {
+    key: String,
+    pos: f32,
+}
+
 /// What a frame needs from the frames before it.
 struct Anim {
     drum: Drum,
+    edge: Glide,
     dt: f32,
     moving: bool,
 }
@@ -94,6 +105,23 @@ impl Anim {
         }
         d.pos
     }
+
+    /// Where the edge arc of control `key` is drawn, gliding towards
+    /// `target`: the ring's detents come a few at a time, and the Core's
+    /// changes in steps, so the arc would otherwise jump.
+    fn edge(&mut self, key: &str, target: f32) -> f32 {
+        let g = &mut self.edge;
+        if g.key != key {
+            *g = Glide { key: key.to_owned(), pos: target };
+        }
+        g.pos += (target - g.pos) * (1.0 - (-self.dt / EDGE_TAU_S).exp());
+        if (target - g.pos).abs() < 0.001 {
+            g.pos = target;
+        } else {
+            self.moving = true;
+        }
+        g.pos
+    }
 }
 
 /// Draws frames that follow on from each other, for animation.
@@ -111,7 +139,8 @@ impl Default for Renderer {
 impl Renderer {
     pub fn new() -> Renderer {
         let drum = Drum { key: String::new(), n: 0, index: 0, target: 0.0, pos: 0.0 };
-        Renderer { anim: Anim { drum, dt: 0.0, moving: false }, last_ms: None }
+        let edge = Glide { key: String::new(), pos: 0.0 };
+        Renderer { anim: Anim { drum, edge, dt: 0.0, moving: false }, last_ms: None }
     }
 
     /// Draws the app as at now_ms; returns whether something is still
@@ -147,7 +176,7 @@ fn draw(app: &App, canvas: &mut Canvas, anim: &mut Anim) {
             status(canvas, "No controls", "Give components a NEST_ Code Name and Script Access External");
             hint(canvas, 360.0, "Hold for Settings");
         }
-        (Some(screen), _) if matches!(screen.layout, Layout::Volume { .. }) => volume(screen, canvas),
+        (Some(screen), _) if matches!(screen.layout, Layout::Volume { .. }) => volume(screen, canvas, anim),
         (Some(screen), mode) if matches!(screen.layout, Layout::Selector { .. }) => selector(screen, mode, canvas, anim),
         (Some(screen), mode) => {
             match app.focused() {
@@ -356,12 +385,13 @@ fn fraction(c: &Control, min: f64, max: f64) -> f32 {
 }
 
 /// A gain component: its level around the edge, its mute by a click.
-fn volume(screen: &Screen, canvas: &mut Canvas) {
+fn volume(screen: &Screen, canvas: &mut Canvas, anim: &mut Anim) {
     let Layout::Volume { gain, mute } = screen.layout else { return };
     let c = &screen.items[gain].control;
     let muted = screen.muted();
     let (min, max) = c.range().unwrap_or((0.0, 1.0));
-    edge(canvas, fraction(c, min, max), if muted { RED } else { ACCENT }, !muted);
+    let f = anim.edge(&format!("{}.{}", screen.component.name, c.name), fraction(c, min, max));
+    edge(canvas, f, if muted { RED } else { ACCENT }, !muted);
     canvas.text_centred(C, 150.0, &screen.title, 34.0, Weight::Bold, 300.0, FG);
     let level = crate::app::percent(c).map_or_else(|| shown(c), |p| format!("{p}%"));
     canvas.text_centred(C, 246.0, &level, 96.0, Weight::Light, 320.0, if muted { DIM } else { FG });
@@ -381,7 +411,8 @@ fn control(app: &App, screen: &Screen, item: &Item, mode: Mode, canvas: &mut Can
         Widget::Dial { min, max } if item.mute.is_some() => {
             let muted = screen.level_muted(app.focus);
             let rgb = if muted { RED } else if editing { EDIT } else { ACCENT };
-            edge(canvas, fraction(c, *min, *max), rgb, !muted);
+            let f = anim.edge(&format!("{}.{}", screen.component.name, c.name), fraction(c, *min, *max));
+            edge(canvas, f, rgb, !muted);
             canvas.text_centred(C, 108.0, &screen.title, 20.0, Weight::Regular, 220.0, DIM);
             canvas.text_centred(C, 150.0, &item.label, 32.0, Weight::Bold, 300.0, FG);
             let level = crate::app::percent(c).map_or_else(|| shown(c), |p| format!("{p}%"));
@@ -399,7 +430,8 @@ fn control(app: &App, screen: &Screen, item: &Item, mode: Mode, canvas: &mut Can
         Widget::Dial { min, max } | Widget::Meter { min, max } => {
             let meter = matches!(item.widget, Widget::Meter { .. });
             let rgb = if meter { FG } else if editing { EDIT } else { ACCENT };
-            edge(canvas, fraction(c, *min, *max), rgb, !meter);
+            let f = anim.edge(&format!("{}.{}", screen.component.name, c.name), fraction(c, *min, *max));
+            edge(canvas, f, rgb, !meter);
             canvas.text_centred(C, 108.0, &screen.title, 20.0, Weight::Regular, 220.0, DIM);
             canvas.text_centred(C, 150.0, &item.label, 32.0, Weight::Bold, 300.0, FG);
             canvas.text_centred(C, 250.0, &shown(c), 80.0, Weight::Light, 320.0, if editing { EDIT } else { FG });
@@ -529,4 +561,35 @@ fn controls_stop(screen: &Screen, canvas: &mut Canvas) {
     canvas.line(C + 10.0, 236.0, C - 18.0, 266.0, 10.0, FG);
     canvas.line(C - 18.0, 266.0, C + 10.0, 296.0, 10.0, FG);
     hint(canvas, 392.0, "Click for all controls");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn anim(dt: f32) -> Anim {
+        let drum = Drum { key: String::new(), n: 0, index: 0, target: 0.0, pos: 0.0 };
+        Anim { drum, edge: Glide { key: String::new(), pos: 0.0 }, dt, moving: false }
+    }
+
+    #[test]
+    fn an_edge_arc_glides_to_a_new_value() {
+        let mut a = anim(0.03);
+        // A new control starts where it is, without gliding in.
+        assert_eq!(a.edge("Zone.gain", 0.5), 0.5);
+        assert!(!a.moving);
+        // A step up is covered over a few frames, not at once.
+        let first = a.edge("Zone.gain", 0.6);
+        assert!(first > 0.5 && first < 0.6, "{first}");
+        assert!(a.moving);
+        let mut pos = first;
+        for _ in 0..20 {
+            a.moving = false;
+            pos = a.edge("Zone.gain", 0.6);
+        }
+        assert_eq!(pos, 0.6);
+        assert!(!a.moving, "at rest once there");
+        // Another control starts afresh.
+        assert_eq!(a.edge("Panel.knob", 0.1), 0.1);
+    }
 }
