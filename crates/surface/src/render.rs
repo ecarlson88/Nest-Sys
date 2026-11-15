@@ -263,6 +263,14 @@ fn settings_row(s: &Settings, row: SettingsRow) -> String {
                 Some(n) => format!("{n} s"),
             }
         ),
+        SettingsRow::ScreenOff => format!(
+            "Screen off: {}",
+            match s.screen_off_s {
+                None => "Never".to_owned(),
+                Some(n) => format!("{} min", n / 60),
+            }
+        ),
+        SettingsRow::Brightness => format!("Brightness: {}%", s.brightness),
         SettingsRow::Clock => format!("Clock: {}", if s.clock24 { "24-hour" } else { "12-hour" }),
         SettingsRow::Network => "Network".into(),
         SettingsRow::Back => "Back to Controls".into(),

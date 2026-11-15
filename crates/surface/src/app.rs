@@ -161,17 +161,33 @@ pub const SETTINGS: usize = usize::MAX;
 pub enum SettingsRow {
     Hints,
     Idle,
+    ScreenOff,
+    Brightness,
     Clock,
     Network,
     Back,
 }
 
-pub const SETTINGS_ROWS: [SettingsRow; 5] =
-    [SettingsRow::Hints, SettingsRow::Idle, SettingsRow::Clock, SettingsRow::Network, SettingsRow::Back];
+pub const SETTINGS_ROWS: [SettingsRow; 7] = [
+    SettingsRow::Hints,
+    SettingsRow::Idle,
+    SettingsRow::ScreenOff,
+    SettingsRow::Brightness,
+    SettingsRow::Clock,
+    SettingsRow::Network,
+    SettingsRow::Back,
+];
 
 /// The idle delays a click on the Idle row steps through, in seconds; None
 /// is never.
 pub const IDLE_CHOICES: [Option<u64>; 4] = [Some(30), Some(60), Some(300), None];
+/// The delays before the backlight goes off a click on the Screen off row
+/// steps through, in seconds; None is never.
+pub const SCREEN_OFF_CHOICES: [Option<u64>; 4] = [Some(60), Some(300), Some(900), None];
+/// The brightnesses a click on the Brightness row steps through, in percent.
+pub const BRIGHTNESS_CHOICES: [u32; 4] = [25, 50, 75, 100];
+/// The home screen's backlight, as a part of the chosen brightness.
+pub const HOME_DIM: f32 = 1.0 / 3.0;
 
 /// What the user chose in Settings, kept by the caller between runs.
 #[derive(Clone, Debug, PartialEq)]
@@ -182,11 +198,15 @@ pub struct Settings {
     pub idle_s: Option<u64>,
     /// A 24-hour clock rather than 12-hour.
     pub clock24: bool,
+    /// Seconds without input before the backlight goes off; None for never.
+    pub screen_off_s: Option<u64>,
+    /// The backlight in use, in percent of its full brightness.
+    pub brightness: u32,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Settings { hints: true, idle_s: Some(60), clock24: false }
+        Settings { hints: true, idle_s: Some(60), clock24: false, screen_off_s: Some(300), brightness: 100 }
     }
 }
 
@@ -206,17 +226,43 @@ impl Settings {
         if let Some(c) = v.get("clock24").and_then(Value::as_bool) {
             s.clock24 = c;
         }
+        match v.get("screen_off_s") {
+            Some(Value::Null) => s.screen_off_s = None,
+            Some(n) => s.screen_off_s = n.as_u64().filter(|&n| n > 0).or(s.screen_off_s),
+            None => {}
+        }
+        if let Some(b) = v.get("brightness").and_then(Value::as_u64).filter(|b| (1..=100).contains(b)) {
+            s.brightness = b as u32;
+        }
         s
     }
 
     pub fn to_json(&self) -> Value {
-        json!({"hints": self.hints, "idle_s": self.idle_s, "clock24": self.clock24})
+        json!({"hints": self.hints, "idle_s": self.idle_s, "clock24": self.clock24,
+               "screen_off_s": self.screen_off_s, "brightness": self.brightness})
     }
 
     /// The idle delay after this one, round IDLE_CHOICES.
     fn next_idle(&self) -> Option<u64> {
         let at = IDLE_CHOICES.iter().position(|&c| c == self.idle_s).unwrap_or(0);
         IDLE_CHOICES[(at + 1) % IDLE_CHOICES.len()]
+    }
+
+    /// The screen-off delay after this one, round SCREEN_OFF_CHOICES.
+    fn next_screen_off(&self) -> Option<u64> {
+        let at = SCREEN_OFF_CHOICES.iter().position(|&c| c == self.screen_off_s).unwrap_or(0);
+        SCREEN_OFF_CHOICES[(at + 1) % SCREEN_OFF_CHOICES.len()]
+    }
+
+    /// The brightness after this one, round BRIGHTNESS_CHOICES.
+    fn next_brightness(&self) -> u32 {
+        let at = BRIGHTNESS_CHOICES.iter().position(|&c| c == self.brightness).unwrap_or(BRIGHTNESS_CHOICES.len() - 1);
+        BRIGHTNESS_CHOICES[(at + 1) % BRIGHTNESS_CHOICES.len()]
+    }
+
+    /// Whether the backlight is off after `quiet_ms` without input.
+    pub fn screen_off(&self, quiet_ms: u64) -> bool {
+        self.screen_off_s.is_some_and(|s| quiet_ms >= s * 1000)
     }
 }
 
@@ -501,7 +547,10 @@ impl App {
     /// Returns whether anything changed on screen.
     pub fn tick(&mut self, now_ms: u64) -> bool {
         let quiet = now_ms.saturating_sub(self.last_input_ms);
-        if !self.idle && self.pressed.is_none() && self.settings.idle_s.is_some_and(|s| quiet >= s * 1000) {
+        // The screen going off counts as going home, so that the first
+        // input after only wakes it.
+        let home = self.settings.idle_s.is_some_and(|s| quiet >= s * 1000) || self.settings.screen_off(quiet);
+        if !self.idle && self.pressed.is_none() && home {
             self.idle = true;
             if matches!(self.mode, Mode::Edit { .. }) {
                 self.mode = Mode::Browse;
@@ -517,6 +566,20 @@ impl App {
             return true;
         }
         false
+    }
+
+    /// The backlight at now_ms, as a part of its full brightness: the chosen
+    /// brightness in use, HOME_DIM of it on the home screen, 0 once the
+    /// screen-off delay has passed.
+    pub fn backlight(&self, now_ms: u64) -> f32 {
+        let full = self.settings.brightness as f32 / 100.0;
+        if !self.idle {
+            full
+        } else if self.settings.screen_off(now_ms.saturating_sub(self.last_input_ms)) {
+            0.0
+        } else {
+            full * HOME_DIM
+        }
     }
 
     /// Puts the screen, focus and mode back on something shown, after the
@@ -637,6 +700,8 @@ impl App {
                     Event::Click => match SETTINGS_ROWS[focus] {
                         SettingsRow::Hints => self.settings.hints = !self.settings.hints,
                         SettingsRow::Idle => self.settings.idle_s = self.settings.next_idle(),
+                        SettingsRow::ScreenOff => self.settings.screen_off_s = self.settings.next_screen_off(),
+                        SettingsRow::Brightness => self.settings.brightness = self.settings.next_brightness(),
                         SettingsRow::Clock => self.settings.clock24 = !self.settings.clock24,
                         SettingsRow::Network => self.mode = Mode::Network,
                         SettingsRow::Back => self.mode = Mode::Menu { focus: SETTINGS },

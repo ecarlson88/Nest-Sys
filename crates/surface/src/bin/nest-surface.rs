@@ -28,7 +28,7 @@ mod unit {
 
     use serde_json::Value;
     use surface::canvas::{Canvas, FACE};
-    use surface::device::{describe, describe_backlights, stop_flag, Console, Framebuffer, Inputs};
+    use surface::device::{describe, describe_backlights, stop_flag, Backlight, Console, Framebuffer, Inputs};
     use surface::diag::Diag;
     use surface::input::{Button, Event};
     use surface::runner::{Config, Input, Runner};
@@ -113,11 +113,15 @@ mod unit {
             return diag(a);
         }
         let stop = stop_flag();
+        // Before the framebuffer, which lights a dark backlight up: what
+        // was there is put back on the way out.
+        let mut backlight = Backlight::open();
         let mut fb = Framebuffer::open(&a.fb).map_err(|e| at(&a.fb, e))?;
         let _console = Console::graphics();
         let mut inputs = Inputs::open(&a.input).map_err(|e| at(&a.input, e))?;
         println!("nest-surface: {:?} panel, Core {}:{}", fb.panel(), a.config.host, a.config.port);
         let mut runner = Runner::new(a.config);
+        let mut checked = Instant::now();
         while !stop.load(Ordering::SeqCst) {
             // Quick rounds while something moves, else wait on the ring.
             let wait = if runner.animating() { 8 } else { 30 };
@@ -126,6 +130,13 @@ mod unit {
             }
             if runner.step() {
                 fb.show(&runner.canvas);
+            }
+            if let Some(b) = &mut backlight {
+                b.set(runner.backlight());
+                if checked.elapsed() >= std::time::Duration::from_secs(2) {
+                    checked = Instant::now();
+                    b.check();
+                }
             }
         }
         // fb and _console put the display back as they go.

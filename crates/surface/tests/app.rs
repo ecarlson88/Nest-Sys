@@ -420,13 +420,22 @@ fn settings_close_the_list_and_switch_the_hints() {
     assert_eq!(app.settings.idle_s, Some(300));
     run(&mut app, &[Down, Up, Click, Down, Up, Click]);
     assert_eq!(app.settings.idle_s, Some(30));
+    // Screen off steps 15 min, never, 1 min, 5 min; brightness 25%, 50%.
+    assert_eq!(app.settings.screen_off_s, Some(300));
+    run(&mut app, &[Turn(1), Down, Up, Click]);
+    assert_eq!(app.settings.screen_off_s, Some(900));
+    run(&mut app, &[Down, Up, Click]);
+    assert_eq!(app.settings.screen_off_s, None);
+    assert_eq!(app.settings.brightness, 100);
+    run(&mut app, &[Turn(1), Down, Up, Click, Down, Up, Click]);
+    assert_eq!(app.settings.brightness, 50);
     run(&mut app, &[Turn(1), Down, Up, Click]);
     assert!(app.settings.clock24);
     // Network, and back.
     run(&mut app, &[Turn(1), Down, Up, Click]);
     assert_eq!(app.mode, Mode::Network);
     run(&mut app, &[Down, Up, Click]);
-    assert_eq!(app.mode, Mode::Settings { focus: 3 });
+    assert_eq!(app.mode, Mode::Settings { focus: 5 });
     // The last row, and a hold, go back to the list.
     run(&mut app, &[Turn(1), Down, Up, Click]);
     assert_eq!(app.mode, Mode::Menu { focus: SETTINGS });
@@ -451,9 +460,9 @@ fn settings_are_reachable_with_nothing_to_show() {
 
 #[test]
 fn settings_survive_a_round_trip_through_json() {
-    let s = Settings { hints: false, idle_s: None, clock24: true };
+    let s = Settings { hints: false, idle_s: None, clock24: true, screen_off_s: None, brightness: 50 };
     assert_eq!(Settings::from_json(&s.to_json()), s);
-    let s = Settings { hints: true, idle_s: Some(300), clock24: false };
+    let s = Settings { hints: true, idle_s: Some(300), clock24: false, screen_off_s: Some(900), brightness: 100 };
     assert_eq!(Settings::from_json(&s.to_json()), s);
     assert_eq!(Settings::from_json(&json!({})), Settings::default(), "missing fields keep defaults");
 }
@@ -485,7 +494,9 @@ fn goes_idle_after_the_delay_and_the_first_input_only_wakes() {
 fn never_idle_when_set_so_or_while_a_momentary_is_held() {
     let mut app = design();
     app.settings.idle_s = None;
+    app.settings.screen_off_s = None;
     assert!(!app.tick(10_000_000));
+    app.settings.screen_off_s = Some(60);
     app.settings.idle_s = Some(30);
     run(&mut app, &[Turn(2), Down]);
     assert_eq!(focused(&app), "momentary.1");
@@ -627,4 +638,36 @@ fn lists_scroll_and_levels_do_not() {
     assert!(app.turns_scroll_a_list(), "a combo box's choices");
     run(&mut app, &[Down, Hold, Up]);
     assert!(app.turns_scroll_a_list(), "the Controls list");
+}
+
+#[test]
+fn the_backlight_dims_at_home_then_goes_off() {
+    let mut app = design();
+    app.settings.idle_s = Some(60);
+    app.settings.screen_off_s = Some(300);
+    app.settings.brightness = 75;
+    app.tick(0);
+    assert_eq!(app.backlight(0), 0.75, "in use: the chosen brightness");
+    app.tick(60_000);
+    assert!(app.idle);
+    assert!((app.backlight(60_000) - 0.25).abs() < 1e-6, "home: a third of it");
+    app.tick(300_000);
+    assert_eq!(app.backlight(300_000), 0.0, "off after the screen-off delay");
+    // The first input only wakes it, at full again.
+    assert!(run(&mut app, &[Turn(1)]).is_empty());
+    assert!(!app.idle);
+    assert_eq!(app.backlight(app.last_input_ms), 0.75);
+}
+
+#[test]
+fn going_off_before_home_still_only_wakes_on_the_first_input() {
+    let mut app = design();
+    app.settings.idle_s = None;
+    app.settings.screen_off_s = Some(60);
+    app.tick(30_000);
+    assert!(!app.idle);
+    app.tick(60_000);
+    assert!(app.idle, "the screen going off counts as home");
+    assert_eq!(app.backlight(60_000), 0.0);
+    assert!(run(&mut app, &[Down, Up, Click]).is_empty(), "the waking click does nothing else");
 }

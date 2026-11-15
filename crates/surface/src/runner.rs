@@ -297,6 +297,9 @@ pub struct Runner {
     start: Instant,
     button: Button,
     events: Vec<Event>,
+    /// When the ring or click was last used, for the backlight while no
+    /// session is up (the app keeps its own).
+    last_input_ms: u64,
     session: Option<Session>,
     /// A connection being made, on its own thread.
     connecting: Option<Receiver<qsys::Result<Session>>>,
@@ -321,6 +324,7 @@ impl Runner {
             start: now,
             button: Button::default(),
             events: Vec::new(),
+            last_input_ms: 0,
             session: None,
             connecting: None,
             last_screen: None,
@@ -341,6 +345,7 @@ impl Runner {
     /// What the ring or click just did.
     pub fn input(&mut self, input: Input) {
         let t = self.now_ms();
+        self.last_input_ms = t;
         match input {
             Input::Turn(n) => self.events.push(Event::Turn(n)),
             Input::Down => self.events.extend(self.button.down(t)),
@@ -356,6 +361,18 @@ impl Runner {
     /// The screen's state, while connected.
     pub fn app(&self) -> Option<&App> {
         self.session.as_ref().map(|s| &s.app)
+    }
+
+    /// The backlight now, as a part of its full brightness (app::App::
+    /// backlight). Without a session, the chosen brightness until the
+    /// screen-off delay passes.
+    pub fn backlight(&self) -> f32 {
+        let t = self.now_ms();
+        match &self.session {
+            Some(s) => s.app.backlight(t),
+            None if self.saved.screen_off(t.saturating_sub(self.last_input_ms)) => 0.0,
+            None => self.saved.brightness as f32 / 100.0,
+        }
     }
 
     /// Whether something is moving on screen, so step is wanted again soon.

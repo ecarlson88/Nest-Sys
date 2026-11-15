@@ -325,6 +325,65 @@ impl Drop for Framebuffer {
     }
 }
 
+/// The panel's backlight (/sys/class/backlight), set to a part of its full
+/// brightness. nlclient drives it too when it has the screen; a change not
+/// made here is logged and undone by `check`. What it was is put back when
+/// dropped.
+pub struct Backlight {
+    dir: std::path::PathBuf,
+    max: u32,
+    before: Option<u32>,
+    /// The level last written, if any.
+    set: Option<u32>,
+}
+
+impl Backlight {
+    /// The first backlight there is, if any.
+    pub fn open() -> Option<Backlight> {
+        let dir = std::fs::read_dir("/sys/class/backlight").ok()?.flatten().map(|e| e.path()).min()?;
+        let read = |name: &str| std::fs::read_to_string(dir.join(name)).ok().and_then(|s| s.trim().parse::<u32>().ok());
+        let max = read("max_brightness").filter(|&m| m > 0)?;
+        let before = read("brightness");
+        Some(Backlight { dir, max, before, set: None })
+    }
+
+    fn level(&self) -> Option<u32> {
+        std::fs::read_to_string(self.dir.join("brightness")).ok().and_then(|s| s.trim().parse().ok())
+    }
+
+    fn write(&mut self, level: u32) {
+        match std::fs::write(self.dir.join("brightness"), format!("{level}\n")) {
+            Ok(()) => self.set = Some(level),
+            Err(e) => eprintln!("{}: {e}", self.dir.display()),
+        }
+    }
+
+    /// Sets it to `fraction` of full (anything above 0 stays visible).
+    pub fn set(&mut self, fraction: f32) {
+        let level = if fraction <= 0.0 { 0 } else { ((self.max as f32 * fraction).round() as u32).clamp(1, self.max) };
+        if self.set != Some(level) {
+            self.write(level);
+        }
+    }
+
+    /// Puts back the level set here if something else changed it, saying so.
+    pub fn check(&mut self) {
+        let (Some(set), Some(now)) = (self.set, self.level()) else { return };
+        if now != set {
+            eprintln!("backlight: something else set it to {now} (of {}); back to {set}", self.max);
+            self.write(set);
+        }
+    }
+}
+
+impl Drop for Backlight {
+    fn drop(&mut self) {
+        if let Some(before) = self.before {
+            self.write(before);
+        }
+    }
+}
+
 /// The backlight up, if whatever ran before left it off.
 fn light_up() {
     let Ok(dir) = std::fs::read_dir("/sys/class/backlight") else { return };

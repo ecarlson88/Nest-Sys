@@ -125,16 +125,19 @@ nothing. In the simulator a list step likewise takes two wheel notches.
   moves and a click opens a component.
 
 - **Home screen:** after a while without input (1 min by default) the
-  screen shows the time and date; the first turn or click only wakes it,
-  back where it was.
+  screen shows the time and date, its backlight dimmed to a third; after
+  the screen-off delay (5 min by default) the backlight goes off. The first
+  turn or click only wakes it, back where it was, at full brightness.
 - **Settings** ends the Controls list. Its rows: **Helper text** (click
   switches the small "Click to ..." hints on or off), **Home screen** (the
-  idle delay: 30 s, 1 min, 5 min or never), **Clock** (12- or 24-hour),
-  **Network** (the Core's
+  idle delay: 30 s, 1 min, 5 min or never), **Screen off** (1, 5 or 15 min
+  or never), **Brightness** (25, 50, 75 or 100%), **Clock** (12- or
+  24-hour), **Network** (the Core's
   address, this unit's IP, the design and the Core's state; click to go
   back) and **Back to Controls**. A hold also goes back. The simulator keeps
-  settings in `surface-settings.json` (`--settings PATH` to move it).
-  Screen timeout and brightness will join them once there is hardware.
+  settings in `surface-settings.json` (`--settings PATH` to move it); it
+  has no backlight, so dimming and screen off show only on the unit, which
+  logs it if anything else (nlclient) changes the backlight while it runs.
 
 Controls are named by their Q-SYS Legend when the design gives one, else
 by their name made readable ("toggle.1" shows as "Toggle", "led.1" as
