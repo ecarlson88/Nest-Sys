@@ -47,6 +47,10 @@ unit will tell.
   signs), `event3` gpio-keys, the click (`KEY_ENTER`). Backlight 1757 of
   2047. The program ran from `/nestlabs/sbin` through the launcher's
   hand-over; turns, clicks and a 0.7 s hold were all read.
+- **First run of the real screen (2026-11-15) [verified by Erik]:**
+  `nest-surface.sh CORE` on the unit connected to Designer's emulation on
+  Erik's PC and worked as intended, ring and click driving it. Lists at 30
+  steps a turn and part-steps dropped on press came in with this build.
 - Frame times on the unit: drawing the pattern ~12 ms, laying out for the
   turned panel and showing ~19 ms (the desktop: ~1 ms), so about 30 frames
   a second; the layout is worth speeding up.

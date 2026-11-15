@@ -114,6 +114,14 @@ the code (its early "Widget mapping (v1)" table, say), the latter are current.
    D-Bus `RegisterEntity` with nlsleepd, declining `RequestSleep`), behind an
    off-by-default option.
 
+## Status, 2026-11-15
+
+The surface runs on Erik's gen 3 against Designer's emulation (HANDOFF.md,
+"Erik's unit as patched"). Open from that first run: how smooth it feels
+(~30 frames a second; the panel layout step is the slow part), whether
+nlclient ever takes the screen back, whether the unit sleeps while the
+surface runs, and starting at boot.
+
 ## Later: power from USB alone (Erik's wish, 2026-11-14)
 
 Erik wants the unit to run from its USB port only, without the base's 24 V
