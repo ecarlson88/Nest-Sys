@@ -122,6 +122,21 @@ The surface runs on Erik's gen 3 against Designer's emulation (HANDOFF.md,
 nlclient ever takes the screen back, whether the unit sleeps while the
 surface runs, and starting at boot.
 
+## Apps in unfr0zen (Erik's decision, 2026-11-15; not started)
+
+The upstream feature should be generic **Apps**, not a Q-SYS entry: an
+Apps section in the unfr0zen exe where users tick the apps to install, as
+Doom is ticked today, and an Apps entry on the UNFR0ZEN screen to launch
+one. Doom's wiring is the model (firmware build -> host assets ->
+`patch.rs` `Options::doom` overlay and nestlocal's `-doom` flag -> the
+UNFR0ZEN screen's page in nlclient, `platform/common/nlclient` -> a
+`.request` -> `crates/nestlocal/src/doom.rs` runs the launcher with the
+screen hand-over). Open questions put to Erik: apps built into the exe or
+installed from a bundle file (recommended: bundle, so the Q-SYS app can
+live in its own repo); where Q-SYS's Core address is entered (recommended:
+fields the bundle declares, shown by the exe; on-unit editing later);
+whether to raise the idea upstream first (recommended; Erik posts).
+
 ## Later: power from USB alone (Erik's wish, 2026-11-14)
 
 Erik wants the unit to run from its USB port only, without the base's 24 V
