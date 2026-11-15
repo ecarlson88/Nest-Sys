@@ -51,6 +51,9 @@ fn shown(c: &Control) -> String {
 const DRUM_TAU_S: f32 = 0.075;
 /// Each row of a drum is this many degrees around it from the next.
 const DRUM_STEP_DEG: f32 = 25.0;
+/// How far from the middle, in rows, a drum's rows are seen: one either
+/// side, and a row rolling in fades in over the half row beyond.
+const DRUM_SHOWN: f32 = 1.5;
 /// The drum's radius: how far from the middle rows sit at a quarter turn.
 const DRUM_R: f32 = 190.0;
 
@@ -305,8 +308,8 @@ fn network(app: &App, canvas: &mut Canvas) {
 }
 
 /// rows as a drum turned to `pos`: the row there in the middle on a pill
-/// of `pill`, in `rgb`; the others above and below, smaller and fainter the
-/// further they have turned away.
+/// of `pill`, in `rgb`; one row above and one below, smaller and fainter.
+/// A row rolling in or out fades over the last half row of its turn.
 fn drum(canvas: &mut Canvas, rows: &[String], pos: f32, pill: u32, rgb: u32) {
     let n = rows.len() as i64;
     if n == 0 {
@@ -323,7 +326,8 @@ fn drum(canvas: &mut Canvas, rows: &[String], pos: f32, pill: u32, rgb: u32) {
     };
     for k in lo..=hi {
         let o = k as f32 - pos;
-        if o.abs() > 2.7 {
+        let shown = ((DRUM_SHOWN - o.abs()) / 0.5).clamp(0.0, 1.0);
+        if shown <= 0.0 {
             continue;
         }
         let theta = (o * DRUM_STEP_DEG).to_radians();
@@ -332,7 +336,7 @@ fn drum(canvas: &mut Canvas, rows: &[String], pos: f32, pill: u32, rgb: u32) {
         // Smaller and fainter as it turns away; the middle row in rgb.
         let size = (40.0 * (0.22 + 0.78 * cos.powi(6)) * 2.0).round() / 2.0;
         let faded = mix(BG, DIM, cos * cos);
-        let colour = mix(faded, rgb, (1.0 - o.abs()).clamp(0.0, 1.0));
+        let colour = mix(BG, mix(faded, rgb, (1.0 - o.abs()).clamp(0.0, 1.0)), shown);
         let half_chord = (C * C - (y - C) * (y - C)).max(0.0).sqrt();
         let width = (2.0 * half_chord - 70.0).clamp(60.0, 320.0);
         let text = &rows[k.rem_euclid(n) as usize];
@@ -451,8 +455,8 @@ fn control(app: &App, screen: &Screen, item: &Item, mode: Mode, canvas: &mut Can
             let (x0, x1) = (C - 38.0, C + 38.0);
             canvas.line(x0, 262.0, x1, 262.0, 76.0, if on { ACCENT } else { TRACK });
             canvas.disc(if on { x1 } else { x0 }, 262.0, 30.0, if on { FG } else { DIM });
-            canvas.text_centred(C, 352.0, &shown(c), 28.0, Weight::Regular, 300.0, if on { FG } else { DIM });
-            hint(canvas, 400.0, "Click to switch");
+            // The switch alone shows the state: no On/Off or true/false.
+            hint(canvas, 360.0, "Click to switch");
         }
         Widget::Indicator => {
             header(canvas, &screen.title, &item.label);
