@@ -438,28 +438,26 @@ pub struct Tone {
     pub ms: u64,
 }
 
-/// The tones for each app::Sound. A piezo is loudest around a few kHz, so
-/// low tones are soft: a quiet "tock". Tuned by ear on the unit, through
-/// config.json (src/bin/nest-surface.rs).
+/// The tones for each app::Sound, None for silence. A piezo is loudest
+/// around a few kHz, so low tones are soft. The defaults are Erik's, by ear
+/// on a gen 3: a low "tock" a step, a slightly higher one at an end, and no
+/// click (the ring's own switch clicks). Tuned through config.json
+/// (src/bin/nest-surface.rs).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Tones {
-    pub tick: Tone,
-    pub click: Tone,
-    pub end: Tone,
+    pub tick: Option<Tone>,
+    pub click: Option<Tone>,
+    pub end: Option<Tone>,
 }
 
 impl Default for Tones {
     fn default() -> Self {
-        Tones {
-            tick: Tone { hz: 240, ms: 6 },
-            click: Tone { hz: 170, ms: 14 },
-            end: Tone { hz: 110, ms: 30 },
-        }
+        Tones { tick: Some(Tone { hz: 70, ms: 10 }), click: None, end: Some(Tone { hz: 90, ms: 12 }) }
     }
 }
 
 impl Tones {
-    pub fn of(&self, sound: crate::app::Sound) -> Tone {
+    pub fn of(&self, sound: crate::app::Sound) -> Option<Tone> {
         match sound {
             crate::app::Sound::Tick => self.tick,
             crate::app::Sound::Click => self.click,

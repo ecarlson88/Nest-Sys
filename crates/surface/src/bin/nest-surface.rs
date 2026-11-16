@@ -17,9 +17,9 @@
 //! runs until SIGTERM or SIGINT, then puts back what the display showed.
 //!
 //! The piezo's sounds for the ring (a tick a step, a click, a turn against
-//! an end) can be tuned there too, each as [pitch in Hz, length in ms]:
-//! {"sounds": {"tick": [240, 6], "click": [170, 14], "end": [110, 30]}}
-//! (those are the defaults). --diag ticks with them, to try them.
+//! an end) can be tuned there too, each as [pitch in Hz, length in ms], or
+//! [0, 0] or null for none: {"sounds": {"tick": [70, 10], "click": null,
+//! "end": [90, 12]}} (those are the defaults). --diag ticks with them.
 //!
 //! --diag needs no Core: it prints what the framebuffer, backlight and
 //! input devices report, shows a test pattern through the same panel path
@@ -86,12 +86,16 @@ mod unit {
         if let Some(sounds) = v.get("sounds") {
             for (name, tone) in [("tick", &mut tones.tick), ("click", &mut tones.click), ("end", &mut tones.end)] {
                 let Some(pair) = sounds.get(name) else { continue };
-                let hz = pair.get(0).and_then(Value::as_i64).filter(|hz| (1..=20_000).contains(hz));
-                let ms = pair.get(1).and_then(Value::as_u64).filter(|ms| (1..=500).contains(ms));
-                match (hz, ms) {
-                    (Some(hz), Some(ms)) => *tone = Tone { hz: hz as i32, ms },
-                    _ => return Err(format!("{path}: sounds.{name}: expected [Hz 1-20000, ms 1-500], got {pair}")),
-                }
+                let (hz, ms) = (pair.get(0).and_then(Value::as_i64), pair.get(1).and_then(Value::as_u64));
+                *tone = match (hz, ms) {
+                    _ if pair.is_null() => None,
+                    (Some(0), _) | (_, Some(0)) => None,
+                    (Some(hz @ 1..=20_000), Some(ms @ 1..=500)) => Some(Tone { hz: hz as i32, ms }),
+                    _ => {
+                        let want = "[Hz 1-20000, ms 1-500], or [0, 0] or null for none";
+                        return Err(format!("{path}: sounds.{name}: expected {want}, got {pair}"));
+                    }
+                };
             }
         }
         Ok(())
@@ -166,8 +170,8 @@ mod unit {
                 fb.show(&runner.canvas);
             }
             for sound in runner.take_sounds() {
-                if let Some(b) = &beeper {
-                    b.play(a.tones.of(sound));
+                if let (Some(b), Some(tone)) = (&beeper, a.tones.of(sound)) {
+                    b.play(tone);
                 }
             }
             if runner.quit() {
@@ -206,10 +210,13 @@ mod unit {
         println!("nest-surface --diag, version {}", env!("CARGO_PKG_VERSION"));
         let beeper = Beeper::open();
         let t = &a.tones;
+        let say = |tone: Option<Tone>| tone.map_or("none".to_owned(), |t| format!("{} Hz {} ms", t.hz, t.ms));
         println!(
-            "sounds: {}; tick {} Hz {} ms, click {} Hz {} ms, end (a long hold here) {} Hz {} ms",
+            "sounds: {}; tick {}, click {}, end (a long hold here) {}",
             if beeper.is_some() { "pwm-beeper" } else { "no pwm-beeper" },
-            t.tick.hz, t.tick.ms, t.click.hz, t.click.ms, t.end.hz, t.end.ms
+            say(t.tick),
+            say(t.click),
+            say(t.end)
         );
         match describe(&a.fb) {
             Ok(d) => section(&format!("{} as found", a.fb.display()), &d),
@@ -289,9 +296,9 @@ mod unit {
                 println!("{stamp}   {}", d.handle(ev));
                 // The sounds as the screen plays them, to tune by ear.
                 let tone = match ev {
-                    Event::Turn(_) => Some(a.tones.tick),
-                    Event::Click => Some(a.tones.click),
-                    Event::LongHold => Some(a.tones.end),
+                    Event::Turn(_) => a.tones.tick,
+                    Event::Click => a.tones.click,
+                    Event::LongHold => a.tones.end,
                     _ => None,
                 };
                 if let (Some(b), Some(tone)) = (&beeper, tone) {

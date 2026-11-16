@@ -97,9 +97,10 @@ box's choices) a step every two detents, 30 a turn. A press drops any part
 of a step turned before it, so the ring's slight give when pressed adds
 nothing. In the simulator a list step likewise takes two wheel notches.
 
-On the unit the piezo gives each step a soft low "tock", a click a click
-sound, and a turn against an end (the Controls list's, a level at 0 or
-100%) its own sound; a turn or click that only wakes the screen is silent.
+On the unit the piezo gives each step a soft low "tock", and a turn against
+an end (the Controls list's, a level at 0 or 100%) a slightly higher one; a
+click makes none by default (the ring's own switch clicks), and a turn
+that only wakes the screen is silent.
 Settings' **Sounds** turns them off. Their pitch and length are set in
 `config.json` (below).
 
@@ -208,8 +209,9 @@ rooted Gen 3 with SSH (unfr0zen's `--ssh`).
 `/media/data/nest-surface/config.json` holds the Core's address:
 `{"core": "192.168.1.20", "port": 1710, "user": "...", "password": "...",
 "prefix": "NEST_"}` (only `core` is needed). The ring's sounds can be tuned
-there too, each as [pitch in Hz, length in ms]; these are the defaults:
-`"sounds": {"tick": [240, 6], "click": [170, 14], "end": [110, 30]}`.
+there too, each as [pitch in Hz, length in ms], or `[0, 0]` or `null` for
+none; these are the defaults, Erik's by ear on a gen 3:
+`"sounds": {"tick": [70, 10], "click": null, "end": [90, 12]}`.
 `nest-surface.sh --diag` ticks with them as the ring turns (a click
 clicks, a 3 s hold plays the end sound), to try them by ear. Settings chosen on the screen
 are kept beside it in `settings.json`.
