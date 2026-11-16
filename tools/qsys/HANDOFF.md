@@ -93,6 +93,15 @@ unit will tell.
   pulsed every 2 s. Now: with the hand-over the surface leaves the
   backlight alone (`--no-backlight`, passed by the launcher); with
   `--exclusive` the launcher stops nlclient and the surface owns it.
+- **nlclient adjusts brightness to room light [verified, 2026-11-16, on the
+  base, surface not running]:** backlight ~1823 uncovered, sinking to
+  ~1780 covered, rising to ~1991 under a torch, changing about once a
+  second and smoothly: so an ambient light sensor exists and nlclient reads
+  it, though Linux shows no sensor device (the source is unknown;
+  `ttymxc5` is the lead). The display also lit from dark at the start,
+  perhaps the proximity sensor (Erik to say whether he touched the ring).
+  In hand-over mode the surface gets this for free (nlclient keeps the
+  backlight); with `--exclusive` it would need the sensor read itself.
 - **On USB power only, the display stayed dark (2026-11-16):** backlight 0,
   page 0 shown, nlclient and nestlocal running, no nest-surface left, and
   turning the ring did not light it. Likely nlclient's no-base state (it
