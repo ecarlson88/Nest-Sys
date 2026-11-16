@@ -117,14 +117,21 @@ unit will tell.
   `OccupancySummary`, `OccupancyScaleFactor`, `nlEventOccupancy`. So light
   and presence (a far PIR and a near one) reach nlclient as messages,
   presumably over `ttymxc5` from a microcontroller, and nlclient builds
-  occupancy from them. Next: the port's speed (`stty -F /dev/ttymxc5 -a`,
-  read-only), then capture on the sacrificial unit.
+  occupancy from them. `ttymxc5` as nlclient set it: **115200 baud, 8N1,
+  hardware flow control (`crtscts`), raw** (`stty -F /dev/ttymxc5 -a`,
+  read-only). Next: capture on the sacrificial unit with nlclient
+  stopped.
 - **Sleep while the surface runs:** nlclient's log (`/var/log/nlclient`)
   shows "client: AttemptToSleep denied - reason:
   mClientGlobals->IsUserInterfaceActive()". During the hand-over the
   keeper marks activity every 2 s, so the unit likely cannot sleep while
   the surface runs that way (fits it never sleeping in Erik's tests). The
-  log has no sensor readings at its normal level.
+  log has no sensor readings at its normal level. **With the display off
+  (nobody in view) the unit suspends and SSH drops** ("client_loop: send
+  disconnect: Connection reset"); stay in view or turn the ring while
+  working. With `--exclusive` nothing holds it awake: the surface will
+  likely need to, as nestlocal does (`crates/nestlocal/src/wake.rs`,
+  RegisterEntity with nlsleepd and declining RequestSleep).
 - **On USB power only, the display stayed dark (2026-11-16):** backlight 0,
   page 0 shown, nlclient and nestlocal running, no nest-surface left, and
   turning the ring did not light it. Likely nlclient's no-base state (it
