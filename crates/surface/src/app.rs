@@ -48,6 +48,8 @@ use crate::input::Event;
 /// Editing ends after this long without a turn or a click, so the next
 /// person to turn the ring does not change a value unawares.
 pub const EDIT_TIMEOUT_MS: u64 = 5000;
+/// How long the Controls list's bounce at an end lasts.
+pub const BUMP_MS: u64 = 260;
 
 /// How long a fired trigger shows as pressed.
 pub const FLASH_MS: u64 = 400;
@@ -153,6 +155,18 @@ pub enum Mode {
     Network,
 }
 
+/// A sound for the ring and click (the unit's piezo), as feedback: what
+/// the front end plays is its own (device::Beeper).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Sound {
+    /// A turn moved something a step.
+    Tick,
+    /// A click.
+    Click,
+    /// A turn met an end (the Controls list's, a level's) and moved nothing.
+    End,
+}
+
 /// The Settings entry's place in Mode::Menu.
 pub const SETTINGS: usize = usize::MAX;
 
@@ -163,16 +177,18 @@ pub enum SettingsRow {
     Idle,
     ScreenOff,
     Brightness,
+    Sounds,
     Clock,
     Network,
     Back,
 }
 
-pub const SETTINGS_ROWS: [SettingsRow; 7] = [
+pub const SETTINGS_ROWS: [SettingsRow; 8] = [
     SettingsRow::Hints,
     SettingsRow::Idle,
     SettingsRow::ScreenOff,
     SettingsRow::Brightness,
+    SettingsRow::Sounds,
     SettingsRow::Clock,
     SettingsRow::Network,
     SettingsRow::Back,
@@ -202,11 +218,13 @@ pub struct Settings {
     pub screen_off_s: Option<u64>,
     /// The backlight in use, in percent of its full brightness.
     pub brightness: u32,
+    /// Ticks for the ring and click (Sound).
+    pub sounds: bool,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Settings { hints: true, idle_s: Some(60), clock24: false, screen_off_s: Some(300), brightness: 100 }
+        Settings { hints: true, idle_s: Some(60), clock24: false, screen_off_s: Some(300), brightness: 100, sounds: true }
     }
 }
 
@@ -234,12 +252,16 @@ impl Settings {
         if let Some(b) = v.get("brightness").and_then(Value::as_u64).filter(|b| (1..=100).contains(b)) {
             s.brightness = b as u32;
         }
+        if let Some(on) = v.get("sounds").and_then(Value::as_bool) {
+            s.sounds = on;
+        }
         s
     }
 
     pub fn to_json(&self) -> Value {
         json!({"hints": self.hints, "idle_s": self.idle_s, "clock24": self.clock24,
-               "screen_off_s": self.screen_off_s, "brightness": self.brightness})
+               "screen_off_s": self.screen_off_s, "brightness": self.brightness,
+               "sounds": self.sounds})
     }
 
     /// The idle delay after this one, round IDLE_CHOICES.
@@ -341,6 +363,11 @@ pub struct App {
     pub exit_hold: Option<(u64, f32)>,
     /// A long hold on the Controls list asked to leave the surface.
     pub quit: bool,
+    /// Sounds for the front end to play, taken with take_sounds.
+    sounds: Vec<Sound>,
+    /// A turn past an end of the Controls list: its direction (-1 left, 1
+    /// right) and when, for the list's bounce.
+    pub bump: Option<(i32, u64)>,
     /// The time, kept current by the caller.
     pub clock: Clock,
     /// The click that woke the screen, still to be let go: its release and
@@ -493,6 +520,7 @@ impl App {
         let screens = found.into_iter().filter_map(|d| screen_of(d, prefix)).collect();
         let mut app = App { screens, screen: 0, focus: 0, mode: Mode::Browse, pressed: None, last_input_ms: 0, flash: None,
             settings: Settings::default(), network: Vec::new(), idle: false, exit_hold: None, quit: false,
+            sounds: Vec::new(), bump: None,
             clock: Clock::default(), waking: false };
         app.settle();
         app
@@ -559,6 +587,12 @@ impl App {
             self.idle = true;
             if matches!(self.mode, Mode::Edit { .. }) {
                 self.mode = Mode::Browse;
+            }
+            return true;
+        }
+        if let Some((_, at)) = self.bump {
+            if now_ms.saturating_sub(at) >= BUMP_MS {
+                self.bump = None;
             }
             return true;
         }
@@ -651,8 +685,37 @@ impl App {
         }
     }
 
-    /// An input at now_ms (the clock tick() is given).
+    /// An input at now_ms (the clock tick() is given). A turn that moved
+    /// something, or met an end, and a click acted on, also leave a Sound.
     pub fn handle(&mut self, ev: Event, now_ms: u64) -> Vec<Set> {
+        // An input that only wakes the screen (handle_input says which)
+        // makes no sound.
+        let only_wakes = self.idle || (self.waking && matches!(ev, Event::Up | Event::Click | Event::Hold));
+        let before = self.feel();
+        let sets = self.handle_input(ev, now_ms);
+        if self.settings.sounds && !only_wakes {
+            match ev {
+                Event::Turn(_) => self.sounds.push(if self.feel() != before { Sound::Tick } else { Sound::End }),
+                Event::Click => self.sounds.push(Sound::Click),
+                _ => {}
+            }
+        }
+        sets
+    }
+
+    /// The sounds left since last taken.
+    pub fn take_sounds(&mut self) -> Vec<Sound> {
+        std::mem::take(&mut self.sounds)
+    }
+
+    /// What a turn can move, to tell a step from an end: the mode, the
+    /// screen and focus, and the current screen's values.
+    fn feel(&self) -> String {
+        let values = self.current().map(|s| s.items.iter().map(|i| i.control.value.to_string()).collect::<Vec<_>>());
+        format!("{:?} {} {} {:?}", self.mode, self.screen, self.focus, values)
+    }
+
+    fn handle_input(&mut self, ev: Event, now_ms: u64) -> Vec<Set> {
         self.last_input_ms = now_ms;
         // Letting go ends a hold towards leaving, wherever it began.
         if ev == Event::Up {
@@ -694,9 +757,15 @@ impl App {
             Mode::Menu { focus } => {
                 let entries = self.menu_entries();
                 match ev {
+                    // The list stops at its ends, Settings last, and bounces
+                    // when turned past one.
                     Event::Turn(n) => {
-                        let at = entries.iter().position(|&i| i == focus).unwrap_or(0);
-                        self.mode = Mode::Menu { focus: entries[wrap(at, n, entries.len())] };
+                        let at = entries.iter().position(|&i| i == focus).unwrap_or(0) as i64;
+                        let to = (at + n as i64).clamp(0, entries.len() as i64 - 1);
+                        if to == at {
+                            self.bump = Some((n.signum(), now_ms));
+                        }
+                        self.mode = Mode::Menu { focus: entries[to as usize] };
                     }
                     // A hold that begins here, held on to a long hold,
                     // leaves the surface (input::LONG_HOLD_MS); a hold that
@@ -721,6 +790,7 @@ impl App {
                         SettingsRow::Idle => self.settings.idle_s = self.settings.next_idle(),
                         SettingsRow::ScreenOff => self.settings.screen_off_s = self.settings.next_screen_off(),
                         SettingsRow::Brightness => self.settings.brightness = self.settings.next_brightness(),
+                        SettingsRow::Sounds => self.settings.sounds = !self.settings.sounds,
                         SettingsRow::Clock => self.settings.clock24 = !self.settings.clock24,
                         SettingsRow::Network => self.mode = Mode::Network,
                         SettingsRow::Back => self.mode = Mode::Menu { focus: SETTINGS },

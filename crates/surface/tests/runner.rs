@@ -105,9 +105,10 @@ fn keeps_settings_chosen_on_the_screen() {
     let mut r = runner(core.port, &file);
     step_until(&mut r, "connected", Runner::connected);
     assert!(load_settings(file.to_str().unwrap()).hints, "helper text is on until switched off");
-    // The list, back one to Settings, its first row: helper text off.
+    // The list, on to its end (three steps of two detents), Settings, its
+    // first row: helper text off.
     hold(&mut r);
-    inputs(&mut r, &[Input::Turn(-2), Input::Down, Input::Up]);
+    inputs(&mut r, &[Input::Turn(6), Input::Down, Input::Up]);
     assert_eq!(r.app().unwrap().mode, Mode::Settings { focus: 0 });
     inputs(&mut r, &[Input::Down, Input::Up]);
     assert!(!load_settings(file.to_str().unwrap()).hints, "saved as soon as chosen");

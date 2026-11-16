@@ -81,7 +81,10 @@ struct Glide {
 struct Anim {
     drum: Drum,
     edge: Glide,
+    /// The Controls list's position: a drum that does not wrap.
+    slide: Drum,
     dt: f32,
+    now_ms: u64,
     moving: bool,
 }
 
@@ -100,6 +103,24 @@ impl Anim {
             d.target += step as f32;
             d.index = index;
         }
+        d.pos += (d.target - d.pos) * (1.0 - (-self.dt / DRUM_TAU_S).exp());
+        if (d.target - d.pos).abs() < 0.002 {
+            d.pos = d.target;
+        } else {
+            self.moving = true;
+        }
+        d.pos
+    }
+
+    /// Where a list that does not wrap (the Controls list) has slid to, for
+    /// `key` of n entries, now on `index`.
+    fn slide(&mut self, key: &str, n: usize, index: usize) -> f32 {
+        let d = &mut self.slide;
+        if d.key != key || d.n != n {
+            *d = Drum { key: key.to_owned(), n, index, target: index as f32, pos: index as f32 };
+        }
+        d.index = index;
+        d.target = index as f32;
         d.pos += (d.target - d.pos) * (1.0 - (-self.dt / DRUM_TAU_S).exp());
         if (d.target - d.pos).abs() < 0.002 {
             d.pos = d.target;
@@ -143,7 +164,8 @@ impl Renderer {
     pub fn new() -> Renderer {
         let drum = Drum { key: String::new(), n: 0, index: 0, target: 0.0, pos: 0.0 };
         let edge = Glide { key: String::new(), pos: 0.0 };
-        Renderer { anim: Anim { drum, edge, dt: 0.0, moving: false }, last_ms: None }
+        let slide = Drum { key: String::new(), n: 0, index: 0, target: 0.0, pos: 0.0 };
+        Renderer { anim: Anim { drum, edge, slide, dt: 0.0, now_ms: 0, moving: false }, last_ms: None }
     }
 
     /// Draws the app as at now_ms; returns whether something is still
@@ -152,6 +174,7 @@ impl Renderer {
         let dt = self.last_ms.map_or(0.0, |t| now_ms.saturating_sub(t) as f32 / 1000.0);
         self.last_ms = Some(now_ms);
         self.anim.dt = dt.min(0.1);
+        self.anim.now_ms = now_ms;
         self.anim.moving = false;
         draw(app, canvas, &mut self.anim);
         self.anim.moving
@@ -230,21 +253,111 @@ fn hint_sized(canvas: &mut Canvas, y: f32, text: &str, size: f32) {
 }
 
 /// The list of components, as a wheel of names around the one shown.
+/// What the Controls list shows for an entry: a picture of its kind.
+#[derive(Clone, Copy, PartialEq)]
+enum Icon {
+    /// A gain: a knob.
+    Volume,
+    /// A combo box alone: a list.
+    Selector,
+    /// Any other component: sliders.
+    Controls,
+    Settings,
+}
+
+/// How far apart the Controls list's icons sit, centre to centre.
+const CAROUSEL_STEP: f32 = 150.0;
+
+/// The Controls list, as a row of icons that slides left and right: the
+/// entry in the middle large with its title, its neighbours smaller and
+/// fainter. It stops at its ends, bouncing when turned past one.
 fn menu(app: &App, focus: usize, canvas: &mut Canvas, anim: &mut Anim) {
     canvas.text_centred(C, 58.0, "Controls", 20.0, Weight::Regular, 200.0, DIM);
     let entries = app.menu_entries();
     let at = entries.iter().position(|&i| i == focus).unwrap_or(0);
-    let titles: Vec<String> = entries
-        .iter()
-        .map(|&i| if i == SETTINGS { "Settings".to_owned() } else { app.screens[i].title.clone() })
-        .collect();
-    let pos = anim.drum("menu", titles.len(), at);
-    drum(canvas, &titles, pos, TRACK, FG);
-    dots(at, titles.len(), canvas);
+    let pos = anim.slide("menu", entries.len(), at);
+    // The bounce: a push the way it was turned, and back.
+    let push = app.bump.map_or(0.0, |(dir, t)| {
+        let f = (anim.now_ms.saturating_sub(t) as f32 / crate::app::BUMP_MS as f32).clamp(0.0, 1.0);
+        anim.moving = true;
+        -(dir as f32) * 22.0 * (f * std::f32::consts::PI).sin()
+    });
+    for (k, &i) in entries.iter().enumerate() {
+        let o = k as f32 - pos;
+        if o.abs() > 1.6 {
+            continue;
+        }
+        let x = C + o * CAROUSEL_STEP + push;
+        let near = (1.0 - o.abs()).clamp(0.0, 1.0);
+        let scale = 0.55 + 0.45 * near;
+        let fade = ((1.6 - o.abs()) / 0.6).clamp(0.0, 1.0);
+        let rgb = mix(BG, mix(DIM2, FG, near), fade);
+        let accent = mix(BG, mix(DIM2, ACCENT, near), fade);
+        let kind = if i == SETTINGS {
+            Icon::Settings
+        } else {
+            match app.screens[i].layout {
+                Layout::Volume { .. } => Icon::Volume,
+                Layout::Selector { .. } => Icon::Selector,
+                Layout::Controls => Icon::Controls,
+            }
+        };
+        icon(canvas, kind, x, 214.0, scale, rgb, accent);
+    }
+    let title = match entries.get(at) {
+        Some(&i) if i == SETTINGS => "Settings".to_owned(),
+        Some(&i) => app.screens[i].title.clone(),
+        None => String::new(),
+    };
+    canvas.text_centred(C, 328.0, &title, 32.0, Weight::Bold, 330.0, FG);
+    dots(at, entries.len(), canvas);
     // A hold here on its way to leaving: the edge fills as it goes on.
     if let Some((_, progress)) = app.exit_hold {
         canvas.arc(C, C, EDGE_R + 10.0, 8.0, -90.0, 360.0 * progress, RED);
         canvas.text_centred(C, 400.0, "Keep holding to exit", 19.0, Weight::Regular, 300.0, RED);
+    }
+}
+
+/// An icon of `kind` centred on (cx, cy), `scale` of its full size (about
+/// 120 across), drawn in rgb with its lively part in accent.
+fn icon(canvas: &mut Canvas, kind: Icon, cx: f32, cy: f32, scale: f32, rgb: u32, accent: u32) {
+    let s = scale;
+    match kind {
+        Icon::Volume => {
+            // A knob: its track, the level around most of it, its pointer.
+            canvas.arc(cx, cy, 46.0 * s, 9.0 * s, 135.0, 270.0, mix(BG, rgb, 0.35));
+            canvas.arc(cx, cy, 46.0 * s, 9.0 * s, 135.0, 180.0, accent);
+            let a = (135.0f32 + 180.0).to_radians();
+            canvas.line(cx, cy, cx + 26.0 * s * a.cos(), cy + 26.0 * s * a.sin(), 8.0 * s, rgb);
+            canvas.disc(cx, cy, 7.0 * s, rgb);
+        }
+        Icon::Selector => {
+            // A list, its middle row picked.
+            for (k, dy) in [-30.0f32, 0.0, 30.0].iter().enumerate() {
+                let y = cy + dy * s;
+                let picked = k == 1;
+                canvas.disc(cx - 40.0 * s, y, 6.0 * s, if picked { accent } else { rgb });
+                canvas.line(cx - 22.0 * s, y, cx + 44.0 * s, y, 10.0 * s, if picked { accent } else { rgb });
+            }
+        }
+        Icon::Controls => {
+            // Three sliders at different levels.
+            for (dx, level) in [(-34.0f32, 0.35f32), (0.0, -0.25), (34.0, 0.1)] {
+                let x = cx + dx * s;
+                canvas.line(x, cy - 44.0 * s, x, cy + 44.0 * s, 6.0 * s, mix(BG, rgb, 0.45));
+                canvas.disc(x, cy + level * 80.0 * s, 11.0 * s, if dx == 0.0 { accent } else { rgb });
+            }
+        }
+        Icon::Settings => {
+            // A gear: eight teeth around a ring.
+            for t in 0..8 {
+                let a = (t as f32 * 45.0).to_radians();
+                let (c, sn) = (a.cos(), a.sin());
+                canvas.line(cx + 34.0 * s * c, cy + 34.0 * s * sn, cx + 48.0 * s * c, cy + 48.0 * s * sn, 16.0 * s, rgb);
+            }
+            canvas.ring(cx, cy, 28.0 * s, 16.0 * s, rgb);
+            canvas.disc(cx, cy, 9.0 * s, accent);
+        }
     }
 }
 
@@ -276,6 +389,7 @@ fn settings_row(s: &Settings, row: SettingsRow) -> String {
             }
         ),
         SettingsRow::Brightness => format!("Brightness: {}%", s.brightness),
+        SettingsRow::Sounds => format!("Sounds: {}", if s.sounds { "On" } else { "Off" }),
         SettingsRow::Clock => format!("Clock: {}", if s.clock24 { "24-hour" } else { "12-hour" }),
         SettingsRow::Network => "Network".into(),
         SettingsRow::Back => "Back to Controls".into(),
@@ -586,7 +700,8 @@ mod tests {
 
     fn anim(dt: f32) -> Anim {
         let drum = Drum { key: String::new(), n: 0, index: 0, target: 0.0, pos: 0.0 };
-        Anim { drum, edge: Glide { key: String::new(), pos: 0.0 }, dt, moving: false }
+        let slide = Drum { key: String::new(), n: 0, index: 0, target: 0.0, pos: 0.0 };
+        Anim { drum, edge: Glide { key: String::new(), pos: 0.0 }, slide, dt, now_ms: 0, moving: false }
     }
 
     #[test]

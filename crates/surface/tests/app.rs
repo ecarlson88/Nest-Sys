@@ -266,9 +266,16 @@ fn the_list_of_components_opens_and_closes() {
     let mut app = design();
     run(&mut app, &[Down, Hold, Up]);
     assert_eq!(app.mode, Mode::Menu { focus: 0 });
-    // Back past the first is Settings, at the list's end; then Combo.
+    // The list stops at its ends, bouncing: nothing before the first...
     run(&mut app, &[Turn(-1)]);
+    assert_eq!(app.mode, Mode::Menu { focus: 0 });
+    assert_eq!(app.bump.map(|(dir, _)| dir), Some(-1));
+    // ...and Settings last, after Combo.
+    run(&mut app, &[Turn(3)]);
     assert_eq!(app.mode, Mode::Menu { focus: SETTINGS });
+    run(&mut app, &[Turn(1)]);
+    assert_eq!(app.mode, Mode::Menu { focus: SETTINGS });
+    assert_eq!(app.bump.map(|(dir, _)| dir), Some(1));
     run(&mut app, &[Turn(-1)]);
     assert_eq!(app.mode, Mode::Menu { focus: 2 });
     run(&mut app, &[Down, Hold, Up]);
@@ -407,7 +414,7 @@ fn settings_close_the_list_and_switch_the_hints() {
     let mut app = design();
     run(&mut app, &[Down, Hold, Up]);
     assert_eq!(*app.menu_entries().last().unwrap(), SETTINGS, "Settings ends the list");
-    run(&mut app, &[Turn(-1)]);
+    run(&mut app, &[Turn(3)]);
     assert_eq!(app.mode, Mode::Menu { focus: SETTINGS });
     run(&mut app, &[Down, Up, Click]);
     assert_eq!(app.mode, Mode::Settings { focus: 0 });
@@ -429,13 +436,16 @@ fn settings_close_the_list_and_switch_the_hints() {
     assert_eq!(app.settings.brightness, 100);
     run(&mut app, &[Turn(1), Down, Up, Click, Down, Up, Click]);
     assert_eq!(app.settings.brightness, 50);
+    assert!(app.settings.sounds);
+    run(&mut app, &[Turn(1), Down, Up, Click]);
+    assert!(!app.settings.sounds, "a click switches the sounds");
     run(&mut app, &[Turn(1), Down, Up, Click]);
     assert!(app.settings.clock24);
     // Network, and back.
     run(&mut app, &[Turn(1), Down, Up, Click]);
     assert_eq!(app.mode, Mode::Network);
     run(&mut app, &[Down, Up, Click]);
-    assert_eq!(app.mode, Mode::Settings { focus: 5 });
+    assert_eq!(app.mode, Mode::Settings { focus: 6 });
     // The last row, and a hold, go back to the list.
     run(&mut app, &[Turn(1), Down, Up, Click]);
     assert_eq!(app.mode, Mode::Menu { focus: SETTINGS });
@@ -460,9 +470,9 @@ fn settings_are_reachable_with_nothing_to_show() {
 
 #[test]
 fn settings_survive_a_round_trip_through_json() {
-    let s = Settings { hints: false, idle_s: None, clock24: true, screen_off_s: None, brightness: 50 };
+    let s = Settings { hints: false, idle_s: None, clock24: true, screen_off_s: None, brightness: 50, sounds: false };
     assert_eq!(Settings::from_json(&s.to_json()), s);
-    let s = Settings { hints: true, idle_s: Some(300), clock24: false, screen_off_s: Some(900), brightness: 100 };
+    let s = Settings { hints: true, idle_s: Some(300), clock24: false, screen_off_s: Some(900), brightness: 100, sounds: true };
     assert_eq!(Settings::from_json(&s.to_json()), s);
     assert_eq!(Settings::from_json(&json!({})), Settings::default(), "missing fields keep defaults");
 }
@@ -692,4 +702,32 @@ fn a_long_hold_begun_on_the_controls_list_leaves() {
     // ...and held to the long hold, it leaves.
     run(&mut app, &[Down, Hold, LongHold]);
     assert!(app.quit);
+}
+
+#[test]
+fn turns_and_clicks_leave_sounds() {
+    use surface::app::Sound;
+    let mut app = design();
+    // The list: a step ticks, an end makes the end sound.
+    run(&mut app, &[Down, Hold, Up]);
+    app.take_sounds();
+    run(&mut app, &[Turn(1)]);
+    assert_eq!(app.take_sounds(), [Sound::Tick]);
+    run(&mut app, &[Turn(-1), Turn(-1)]);
+    assert_eq!(app.take_sounds(), [Sound::Tick, Sound::End]);
+    // A click acted on clicks; a hold makes none.
+    run(&mut app, &[Down, Up, Click]);
+    assert_eq!(app.take_sounds(), [Sound::Click]);
+    // A turn that only wakes the screen is silent, and so is a click
+    // whose press woke it.
+    app.idle = true;
+    run(&mut app, &[Turn(1)]);
+    assert!(app.take_sounds().is_empty());
+    app.idle = true;
+    run(&mut app, &[Down, Up, Click]);
+    assert!(app.take_sounds().is_empty());
+    // Off in Settings, nothing.
+    app.settings.sounds = false;
+    run(&mut app, &[Turn(1), Down, Up, Click]);
+    assert!(app.take_sounds().is_empty());
 }

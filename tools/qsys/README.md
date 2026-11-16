@@ -97,6 +97,12 @@ box's choices) a step every two detents, 30 a turn. A press drops any part
 of a step turned before it, so the ring's slight give when pressed adds
 nothing. In the simulator a list step likewise takes two wheel notches.
 
+On the unit the piezo gives each step a soft low "tock", a click a click
+sound, and a turn against an end (the Controls list's, a level at 0 or
+100%) its own sound; a turn or click that only wakes the screen is silent.
+Settings' **Sounds** turns them off. Their pitch and length are set in
+`config.json` (below).
+
 - **A Gain component** is a volume knob: the ring sets the level as it
   turns, shown as 0-100% of the gain's range, 1% a detent, a click mutes or unmutes, a hold opens the **Controls** list.
   While muted (red), the first turn unmutes without changing the level.
@@ -121,8 +127,11 @@ nothing. In the simulator a list step likewise takes two wheel notches.
   combo box it moves through the choices; a click picks one, a hold cancels.
   A click closes a dial. Editing also ends after 5 s without a turn or click
   (a combo box's choice is then dropped).
-- **Hold** on a screen is a shortcut to the Controls list. There, the ring
-  moves and a click opens a component.
+- **Hold** on a screen is a shortcut to the Controls list: a row of icons
+  that slides left and right, one per component (a knob for a gain, a list
+  for a combo box, sliders for the rest, a gear for Settings, last), the
+  one in the middle large with its title. The ring moves along it, stopping
+  at either end with a small bounce; a click opens a component.
 
 - **Leaving:** a hold begun on the Controls list (or on "Connecting…"),
   kept up for 3 s, leaves the surface: a red arc fills around the edge
@@ -137,7 +146,7 @@ nothing. In the simulator a list step likewise takes two wheel notches.
 - **Settings** ends the Controls list. Its rows: **Helper text** (click
   switches the small "Click to ..." hints on or off), **Home screen** (the
   idle delay: 30 s, 1 min, 5 min or never), **Screen off** (1, 5 or 15 min
-  or never), **Brightness** (25, 50, 75 or 100%), **Clock** (12- or
+  or never), **Brightness** (25, 50, 75 or 100%), **Sounds** (on or off), **Clock** (12- or
   24-hour), **Network** (the Core's
   address, this unit's IP, the design and the Core's state; click to go
   back) and **Back to Controls**. A hold also goes back. The simulator keeps
@@ -198,7 +207,11 @@ rooted Gen 3 with SSH (unfr0zen's `--ssh`).
 
 `/media/data/nest-surface/config.json` holds the Core's address:
 `{"core": "192.168.1.20", "port": 1710, "user": "...", "password": "...",
-"prefix": "NEST_"}` (only `core` is needed). Settings chosen on the screen
+"prefix": "NEST_"}` (only `core` is needed). The ring's sounds can be tuned
+there too, each as [pitch in Hz, length in ms]; these are the defaults:
+`"sounds": {"tick": [240, 6], "click": [170, 14], "end": [110, 30]}`.
+`nest-surface.sh --diag` ticks with them as the ring turns (a click
+clicks, a 3 s hold plays the end sound), to try them by ear. Settings chosen on the screen
 are kept beside it in `settings.json`.
 
 To keep it running and start it at boot, on a unit whose root file system

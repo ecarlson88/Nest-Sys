@@ -40,6 +40,8 @@ const fn eviocgbit(ev: u16, len: u32) -> u32 {
     0x8000_0000 | len << 16 | (0x4520 + ev as u32)
 }
 const EV_SYN: u16 = 0x00;
+const EV_SND: u16 = 0x12;
+const SND_TONE: u16 = 0x02;
 const EV_KEY: u16 = 0x01;
 const EV_REL: u16 = 0x02;
 /// The gen 2's ring.
@@ -429,6 +431,78 @@ impl Drop for Console {
     }
 }
 
+/// A tone for the piezo: its pitch and how long it sounds.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Tone {
+    pub hz: i32,
+    pub ms: u64,
+}
+
+/// The tones for each app::Sound. A piezo is loudest around a few kHz, so
+/// low tones are soft: a quiet "tock". Tuned by ear on the unit, through
+/// config.json (src/bin/nest-surface.rs).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Tones {
+    pub tick: Tone,
+    pub click: Tone,
+    pub end: Tone,
+}
+
+impl Default for Tones {
+    fn default() -> Self {
+        Tones {
+            tick: Tone { hz: 240, ms: 6 },
+            click: Tone { hz: 170, ms: 14 },
+            end: Tone { hz: 110, ms: 30 },
+        }
+    }
+}
+
+impl Tones {
+    pub fn of(&self, sound: crate::app::Sound) -> Tone {
+        match sound {
+            crate::app::Sound::Tick => self.tick,
+            crate::app::Sound::Click => self.click,
+            crate::app::Sound::End => self.end,
+        }
+    }
+}
+
+/// The piezo (the input device "pwm-beeper", which takes EV_SND tones, as
+/// Doom's sound and nestlocal's pairing beep use it), played from a thread
+/// of its own so that a tone never holds up drawing. Tones asked for while
+/// several wait are dropped: a fast turn ticks as fast as it can, no more.
+pub struct Beeper {
+    tones: std::sync::mpsc::Sender<Tone>,
+}
+
+impl Beeper {
+    pub fn open() -> Option<Beeper> {
+        let path = std::fs::read_dir("/sys/class/input").ok()?.flatten().find_map(|e| {
+            let name = e.file_name().into_string().ok().filter(|n| n.starts_with("event"))?;
+            let device = std::fs::read_to_string(e.path().join("device/name")).ok()?;
+            (device.trim_end() == "pwm-beeper").then(|| Path::new("/dev/input").join(name))
+        })?;
+        let mut file = OpenOptions::new().write(true).open(path).ok()?;
+        let (tones, queue) = std::sync::mpsc::channel::<Tone>();
+        std::thread::spawn(move || {
+            use std::io::Write;
+            while let Ok(first) = queue.recv() {
+                // The latest of those waiting.
+                let tone = queue.try_iter().last().unwrap_or(first);
+                let _ = file.write_all(&event_bytes(EV_SND, SND_TONE, tone.hz));
+                std::thread::sleep(std::time::Duration::from_millis(tone.ms));
+                let _ = file.write_all(&event_bytes(EV_SND, SND_TONE, 0));
+            }
+        });
+        Some(Beeper { tones })
+    }
+
+    pub fn play(&self, tone: Tone) {
+        let _ = self.tones.send(tone);
+    }
+}
+
 /// The size of a struct input_event: two longs of time, then type, code
 /// and value (16 bytes on the units' 32-bit ARM).
 const EVENT: usize = 2 * std::mem::size_of::<libc::c_ulong>() + 8;
@@ -460,6 +534,16 @@ impl std::fmt::Display for RawEvent {
         };
         write!(f, "{kind} ({}) {code} value {}", self.kind, self.value)
     }
+}
+
+/// An input_event to write, its time left zero.
+fn event_bytes(kind: u16, code: u16, value: i32) -> [u8; EVENT] {
+    let mut e = [0u8; EVENT];
+    let at = EVENT - 8;
+    e[at..at + 2].copy_from_slice(&kind.to_ne_bytes());
+    e[at + 2..at + 4].copy_from_slice(&code.to_ne_bytes());
+    e[at + 4..].copy_from_slice(&value.to_ne_bytes());
+    e
 }
 
 /// Reads input_events into inputs: the ring's counts into whole detents
@@ -498,7 +582,10 @@ pub fn parse_events(bytes: &[u8], ring: &mut Ring, out: &mut Vec<Input>, mut raw
 }
 
 /// An input device's name, and what it reports of the ring and click.
-fn describe_input(f: &File) -> String {
+/// An input device's name and what it reports, and whether it sends keys
+/// or relative motion (the ring and click are among those; the piezo, which
+/// only takes tones, is not).
+fn describe_input(f: &File) -> (String, bool) {
     let mut name = [0u8; 64];
     let name = match ioctl(f, eviocgname(name.len() as u32), name.as_mut_ptr()) {
         Ok(()) => String::from_utf8_lossy(name.split(|&b| b == 0).next().unwrap_or(&[])).into_owned(),
@@ -524,10 +611,13 @@ fn describe_input(f: &File) -> String {
             what.push(label);
         }
     }
-    format!("\"{name}\": {}", if what.is_empty() { "nothing known".into() } else { what.join(", ") })
+    let input = has(&types, EV_KEY) || has(&types, EV_REL);
+    (format!("\"{name}\": {}", if what.is_empty() { "nothing known".into() } else { what.join(", ") }), input)
 }
 
-/// Every input device, grabbed so that nothing else sees them.
+/// Every input device that sends keys or motion, grabbed so that nothing
+/// else sees them. Others (the piezo) are listed but left alone: the kernel
+/// drops tones sent to a grabbed device by anyone but its grabber.
 pub struct Inputs {
     files: Vec<File>,
     /// Each open file's place in names.
@@ -559,7 +649,11 @@ impl Inputs {
                     continue;
                 }
             };
-            let mut what = describe_input(&f);
+            let (mut what, input) = describe_input(&f);
+            if !input {
+                names.push((file_name, what + " (left alone)"));
+                continue;
+            }
             if let Err(e) = ioctl_value(&f, EVIOCGRAB, 1) {
                 what.push_str(&format!(" (not grabbed: {e})"));
             }
@@ -660,6 +754,16 @@ mod tests {
         assert_eq!(raw[0], RawEvent { kind: EV_REL, code: REL_DIAL, value: -120 });
         assert_eq!(raw[0].to_string(), "EV_REL (2) REL_DIAL value -120");
         assert_eq!(raw[7].to_string(), "EV_ABS (3) code 0 value 5");
+    }
+
+    #[test]
+    fn writes_a_tone_as_an_input_event() {
+        let e = event_bytes(EV_SND, SND_TONE, 240);
+        let w = EVENT - 8;
+        assert_eq!(&e[..w], &vec![0u8; w][..], "untimed");
+        assert_eq!(&e[w..w + 2], &EV_SND.to_ne_bytes());
+        assert_eq!(&e[w + 2..w + 4], &SND_TONE.to_ne_bytes());
+        assert_eq!(&e[w + 4..], &240i32.to_ne_bytes());
     }
 
     #[test]

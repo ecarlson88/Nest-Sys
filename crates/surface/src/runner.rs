@@ -379,6 +379,12 @@ impl Runner {
         }
     }
 
+    /// The sounds the app left since last taken (app::Sound), for a front
+    /// end that can play them.
+    pub fn take_sounds(&mut self) -> Vec<crate::app::Sound> {
+        self.session.as_mut().map(|s| s.app.take_sounds()).unwrap_or_default()
+    }
+
     /// Whether a long hold asked to leave the surface (front ends that can
     /// stop, the unit's, do; the screen goes back to what was there).
     pub fn quit(&self) -> bool {
