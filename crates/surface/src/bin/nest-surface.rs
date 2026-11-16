@@ -7,6 +7,10 @@
 //!         [--fb /dev/fb0] [--input /dev/input]
 //!     nest-surface --diag [--fb /dev/fb0] [--input /dev/input]
 //!
+//! --no-backlight leaves the backlight alone: the launcher passes it when
+//! nlclient keeps running behind the surface (its screen hand-over), since
+//! nlclient lights the display at its own brightness every 2 s.
+//!
 //! The Core's address and the rest come from the config file, a JSON
 //! object {"core": "192.168.1.20", "port": 1710, "user": "...",
 //! "password": "...", "prefix": "NEST_"}; options given override it. It
@@ -40,6 +44,9 @@ mod unit {
         fb: PathBuf,
         input: PathBuf,
         diag: bool,
+        /// Whether to drive the backlight (Settings' brightness, dimming at
+        /// home, screen off).
+        backlight: bool,
     }
 
     /// The config file's fields into config, where the command line has
@@ -79,7 +86,7 @@ mod unit {
             .map_or_else(|| format!("{DATA}/config.json"), |w| w[1].clone());
         let mut config = Config::new("", &format!("{DATA}/settings.json"));
         read_config(&file, &mut config)?;
-        let mut a = Args { config, fb: "/dev/fb0".into(), input: "/dev/input".into(), diag: false };
+        let mut a = Args { config, fb: "/dev/fb0".into(), input: "/dev/input".into(), diag: false, backlight: true };
         let mut it = argv.into_iter();
         while let Some(arg) = it.next() {
             let mut value = || it.next().ok_or(format!("{arg} needs a value"));
@@ -93,6 +100,7 @@ mod unit {
                 "--fb" => a.fb = value()?.into(),
                 "--input" => a.input = value()?.into(),
                 "--diag" => a.diag = true,
+                "--no-backlight" => a.backlight = false,
                 s if s.starts_with('-') => return Err(format!("unknown option {s}")),
                 s => a.config.host = s.into(),
             }
@@ -115,7 +123,10 @@ mod unit {
         let stop = stop_flag();
         // Before the framebuffer, which lights a dark backlight up: what
         // was there is put back on the way out.
-        let mut backlight = Backlight::open();
+        let mut backlight = if a.backlight { Backlight::open() } else { None };
+        if !a.backlight {
+            println!("nest-surface: leaving the backlight to nlclient");
+        }
         let mut fb = Framebuffer::open(&a.fb).map_err(|e| at(&a.fb, e))?;
         let _console = Console::graphics();
         let mut inputs = Inputs::open(&a.input).map_err(|e| at(&a.input, e))?;

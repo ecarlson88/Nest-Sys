@@ -186,8 +186,15 @@ rooted Gen 3 with SSH (unfr0zen's `--ssh`).
 3. Try it from an SSH session: `sh /media/data/nest-surface/nest-surface.sh`.
    It takes the screen through nlclient's hand-over when nlclient is patched
    for it (nlclient keeps running, showing nothing), else stops nlclient and
-   starts it again afterwards. Ctrl-C (or SIGTERM) stops it and puts the
-   display back. Its log is `/tmp/nest-surface.log`.
+   starts it again afterwards. Ctrl-C (or SIGTERM), or a long hold on the
+   Controls list, stops it and puts the display back. Its log is
+   `/tmp/nest-surface.log`.
+
+   During the hand-over nlclient relights the display at its own brightness
+   every 2 s, so the surface leaves the backlight to it: Brightness, dimming
+   and Screen off do nothing then. `nest-surface.sh --exclusive CORE` stops
+   nlclient instead (the thermostat does not run until the surface stops),
+   and all of them work. The launcher's first line says which way it went.
 
 `/media/data/nest-surface/config.json` holds the Core's address:
 `{"core": "192.168.1.20", "port": 1710, "user": "...", "password": "...",

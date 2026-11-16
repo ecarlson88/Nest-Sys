@@ -75,6 +75,14 @@ unit will tell.
 - The backlight driver logs "Setting ramp_rise_time 250 msec / ramp_fall_time
   2000 msec" on every write; the first backlight build rewrote it every 2 s
   (its check), now compared with what the driver reads back.
+- **Backlight pulsing [verified in the code]:** during the hand-over,
+  unfr0zen's patched nlclient runs a keeper thread that calls
+  `wake_display` every 2 s (`platform/common/nlclient/src/custom_screen.c`):
+  it marks activity and returns `nlUIResultLightDisplay`, which relights
+  the display at nlclient's brightness. Against our own backlight that
+  pulsed every 2 s. Now: with the hand-over the surface leaves the
+  backlight alone (`--no-backlight`, passed by the launcher); with
+  `--exclusive` the launcher stops nlclient and the surface owns it.
 - **This unit is Erik's house thermostat** (unfr0zen with Home Assistant).
   Keep surface runs on it short until it is known which way the launcher
   took the screen: with nlclient's hand-over the heating keeps running;

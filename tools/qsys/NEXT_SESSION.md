@@ -131,7 +131,15 @@ one. Doom's wiring is the model (firmware build -> host assets ->
 `patch.rs` `Options::doom` overlay and nestlocal's `-doom` flag -> the
 UNFR0ZEN screen's page in nlclient, `platform/common/nlclient` -> a
 `.request` -> `crates/nestlocal/src/doom.rs` runs the launcher with the
-screen hand-over). Erik decided: apps come as **bundle files**
+screen hand-over). For the Apps feature, later: the hand-over's keeper thread
+(`custom_screen.c`, `keeper` -> `wake_display` -> `light_display`) both
+marks activity (keeps nlclient from sleeping) and returns
+`nlUIResultLightDisplay` (relights at nlclient's brightness) every 2 s, so
+an app cannot own the backlight while nlclient runs. Idea: while the
+screen is owned, mark activity but return a result that does not light
+the display, so the app owns the backlight. Needs the patched nlclient
+rebuilt, its tests (`platform/common/nlclient/tests`) and a unit to try.
+Erik decided: apps come as **bundle files**
 (the Q-SYS app can live in its own repo); an app's settings (Q-SYS's Core
 address) are entered **on the Nest itself**, with a ring keyboard like
 the stock one (HANDOFF.md describes it); raise the idea upstream first: a
