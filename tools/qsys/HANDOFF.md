@@ -108,6 +108,12 @@ unit will tell.
   (source unknown; `ttymxc5` the lead; nlclient's log may name it).
   In hand-over mode the surface gets this for free (nlclient keeps the
   backlight); with `--exclusive` it would need the sensor read itself.
+- **Sleep while the surface runs:** nlclient's log (`/var/log/nlclient`)
+  shows "client: AttemptToSleep denied - reason:
+  mClientGlobals->IsUserInterfaceActive()". During the hand-over the
+  keeper marks activity every 2 s, so the unit likely cannot sleep while
+  the surface runs that way (fits it never sleeping in Erik's tests). The
+  log has no sensor readings at its normal level.
 - **On USB power only, the display stayed dark (2026-11-16):** backlight 0,
   page 0 shown, nlclient and nestlocal running, no nest-surface left, and
   turning the ring did not light it. Likely nlclient's no-base state (it
