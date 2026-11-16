@@ -93,6 +93,12 @@ unit will tell.
   pulsed every 2 s. Now: with the hand-over the surface leaves the
   backlight alone (`--no-backlight`, passed by the launcher); with
   `--exclusive` the launcher stops nlclient and the surface owns it.
+- **On USB power only, the display stayed dark (2026-11-16):** backlight 0,
+  page 0 shown, nlclient and nestlocal running, no nest-surface left, and
+  turning the ring did not light it. Likely nlclient's no-base state (it
+  shows "reconnect to base", then perhaps turns the display off and no
+  longer wakes for the ring); not confirmed. To tell: after a reboot, see
+  whether the ring wakes it before any surface run, then after one.
 - **This unit is Erik's house thermostat** (unfr0zen with Home Assistant).
   Keep surface runs on it short until it is known which way the launcher
   took the screen: with nlclient's hand-over the heating keeps running;
