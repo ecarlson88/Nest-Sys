@@ -98,8 +98,14 @@ unit will tell.
   ~1780 covered, rising to ~1991 under a torch, changing about once a
   second and smoothly: so an ambient light sensor exists and nlclient reads
   it, though Linux shows no sensor device (the source is unknown;
-  `ttymxc5` is the lead). The display also lit from dark at the start,
-  perhaps the proximity sensor (Erik to say whether he touched the ring).
+  `ttymxc5` is the lead). **And a far-field presence sensor [verified
+  by Erik, 2026-11-16]:** out of its view (moving side to side 4-5 ft
+  away) the backlight goes to 0 after a short delay; back in view it is on
+  again within a second. Probably what Nest calls Farsight [from memory].
+  A candidate trigger for Q-SYS (room occupancy) and for waking the
+  surface; but in hand-over the keeper relights every 2 s, hiding it, and
+  with `--exclusive` nlclient is gone: the sensor must be read directly
+  (source unknown; `ttymxc5` the lead; nlclient's log may name it).
   In hand-over mode the surface gets this for free (nlclient keeps the
   backlight); with `--exclusive` it would need the sensor read itself.
 - **On USB power only, the display stayed dark (2026-11-16):** backlight 0,

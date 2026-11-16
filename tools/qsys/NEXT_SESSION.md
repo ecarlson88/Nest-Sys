@@ -163,6 +163,18 @@ list of colours. Settled UI choices to keep: no on/off or true/false text
 on toggles or indicators; buttons keep "Press"/"Hold", Settings keeps
 "Helper text: On/Off".
 
+## Later: the Nest's sensors as Q-SYS triggers (Erik's wish)
+
+Erik wants the unit's sensors as triggers for Q-SYS. Found so far
+(HANDOFF.md): nlclient follows an ambient light sensor (auto-brightness)
+and a far-field presence sensor (display on when someone is in view at
+4-5 ft, off after they leave). Neither is a Linux device; nlclient holds
+one serial port, `/dev/ttymxc5`, the best lead. Next: nlclient's log for
+what it calls them; then, on the sacrificial unit with `--exclusive`
+(nlclient stopped), listen on `ttymxc5`. If readable: publish presence and
+light to the Core (e.g. as controls of a NEST_ component) and use presence
+to wake the surface.
+
 ## Later: power from USB alone (Erik's wish, 2026-11-14)
 
 Erik wants the unit to run from its USB port only, without the base's 24 V
