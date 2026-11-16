@@ -149,7 +149,7 @@ pub enum Mode {
     /// The list of components, with the one shown (SETTINGS for the
     /// Settings entry at its end).
     Menu { focus: usize },
-    /// The Settings list, with the row shown (SETTINGS_ROWS).
+    /// The Settings list, with the row shown (an index into settings_rows).
     Settings { focus: usize },
     /// The network information page.
     Network,
@@ -363,6 +363,10 @@ pub struct App {
     pub exit_hold: Option<(u64, f32)>,
     /// A long hold on the Controls list asked to leave the surface.
     pub quit: bool,
+    /// Whether the front end drives the backlight. Not while nlclient runs
+    /// behind the surface (its hand-over relights it): Brightness and Screen
+    /// off are then hidden, and the screen never counts as off.
+    pub owns_backlight: bool,
     /// Sounds for the front end to play, taken with take_sounds.
     sounds: Vec<Sound>,
     /// A turn past an end of the Controls list: its direction (-1 left, 1
@@ -519,7 +523,7 @@ impl App {
     pub fn new(found: Vec<Discovered>, prefix: &str) -> App {
         let screens = found.into_iter().filter_map(|d| screen_of(d, prefix)).collect();
         let mut app = App { screens, screen: 0, focus: 0, mode: Mode::Browse, pressed: None, last_input_ms: 0, flash: None,
-            settings: Settings::default(), network: Vec::new(), idle: false, exit_hold: None, quit: false,
+            settings: Settings::default(), network: Vec::new(), idle: false, exit_hold: None, quit: false, owns_backlight: true,
             sounds: Vec::new(), bump: None,
             clock: Clock::default(), waking: false };
         app.settle();
@@ -582,7 +586,7 @@ impl App {
         let quiet = now_ms.saturating_sub(self.last_input_ms);
         // The screen going off counts as going home, so that the first
         // input after only wakes it.
-        let home = self.settings.idle_s.is_some_and(|s| quiet >= s * 1000) || self.settings.screen_off(quiet);
+        let home = self.settings.idle_s.is_some_and(|s| quiet >= s * 1000) || self.screen_off(quiet);
         if !self.idle && self.pressed.is_none() && home {
             self.idle = true;
             if matches!(self.mode, Mode::Edit { .. }) {
@@ -612,6 +616,21 @@ impl App {
         false
     }
 
+    /// Whether the backlight is off after `quiet_ms` without input: never
+    /// when it is not ours to turn off.
+    fn screen_off(&self, quiet_ms: u64) -> bool {
+        self.owns_backlight && self.settings.screen_off(quiet_ms)
+    }
+
+    /// The Settings rows shown: Brightness and Screen off only when the
+    /// backlight is ours.
+    pub fn settings_rows(&self) -> Vec<SettingsRow> {
+        SETTINGS_ROWS
+            .into_iter()
+            .filter(|r| self.owns_backlight || !matches!(r, SettingsRow::Brightness | SettingsRow::ScreenOff))
+            .collect()
+    }
+
     /// The backlight at now_ms, as a part of its full brightness: the chosen
     /// brightness in use, HOME_DIM of it on the home screen, 0 once the
     /// screen-off delay has passed.
@@ -619,7 +638,7 @@ impl App {
         let full = self.settings.brightness as f32 / 100.0;
         if !self.idle {
             full
-        } else if self.settings.screen_off(now_ms.saturating_sub(self.last_input_ms)) {
+        } else if self.screen_off(now_ms.saturating_sub(self.last_input_ms)) {
             0.0
         } else {
             full * HOME_DIM
@@ -784,8 +803,8 @@ impl App {
             }
             Mode::Settings { focus } => {
                 match ev {
-                    Event::Turn(n) => self.mode = Mode::Settings { focus: wrap(focus, n, SETTINGS_ROWS.len()) },
-                    Event::Click => match SETTINGS_ROWS[focus] {
+                    Event::Turn(n) => self.mode = Mode::Settings { focus: wrap(focus, n, self.settings_rows().len()) },
+                    Event::Click => match self.settings_rows().get(focus).copied().unwrap_or(SettingsRow::Back) {
                         SettingsRow::Hints => self.settings.hints = !self.settings.hints,
                         SettingsRow::Idle => self.settings.idle_s = self.settings.next_idle(),
                         SettingsRow::ScreenOff => self.settings.screen_off_s = self.settings.next_screen_off(),
@@ -802,7 +821,7 @@ impl App {
             }
             Mode::Network => {
                 if matches!(ev, Event::Click | Event::Hold) {
-                    let row = SETTINGS_ROWS.iter().position(|&r| r == SettingsRow::Network).unwrap_or(0);
+                    let row = self.settings_rows().iter().position(|&r| r == SettingsRow::Network).unwrap_or(0);
                     self.mode = Mode::Settings { focus: row };
                 }
                 return Vec::new();

@@ -126,7 +126,10 @@ mod unit {
                 "--fb" => a.fb = value()?.into(),
                 "--input" => a.input = value()?.into(),
                 "--diag" => a.diag = true,
-                "--no-backlight" => a.backlight = false,
+                "--no-backlight" => {
+                    a.backlight = false;
+                    a.config.backlight = false;
+                }
                 s if s.starts_with('-') => return Err(format!("unknown option {s}")),
                 s => a.config.host = s.into(),
             }

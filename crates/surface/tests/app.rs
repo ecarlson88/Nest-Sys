@@ -731,3 +731,21 @@ fn turns_and_clicks_leave_sounds() {
     run(&mut app, &[Turn(1), Down, Up, Click]);
     assert!(app.take_sounds().is_empty());
 }
+
+#[test]
+fn hides_the_backlight_settings_when_the_backlight_is_not_ours() {
+    use surface::app::SettingsRow;
+    let mut app = design();
+    assert!(app.settings_rows().contains(&SettingsRow::Brightness));
+    app.owns_backlight = false;
+    let rows = app.settings_rows();
+    assert!(!rows.contains(&SettingsRow::Brightness) && !rows.contains(&SettingsRow::ScreenOff), "{rows:?}");
+    // The rows shift up: the third is Sounds now, and a click switches it.
+    run(&mut app, &[Down, Hold, Up, Turn(3), Down, Up, Click, Turn(2), Down, Up, Click]);
+    assert!(!app.settings.sounds);
+    // And the screen never counts as off, only the home screen delay.
+    app.settings.idle_s = None;
+    app.settings.screen_off_s = Some(60);
+    app.tick(app.last_input_ms + 120_000);
+    assert!(!app.idle);
+}

@@ -43,6 +43,8 @@ pub struct Config {
     pub prefix: String,
     /// The file Settings are kept in.
     pub settings: String,
+    /// Whether the front end drives the backlight (app::App::owns_backlight).
+    pub backlight: bool,
 }
 
 impl Config {
@@ -54,6 +56,7 @@ impl Config {
             password: String::new(),
             prefix: PREFIX.to_owned(),
             settings: settings.to_owned(),
+            backlight: true,
         }
     }
 
@@ -487,6 +490,7 @@ impl Runner {
             Ok(mut s) => {
                 println!("connected to {}:{}: {} screens", c.host, c.port, s.app.screens.len());
                 s.app.settings = self.saved.clone();
+                s.app.owns_backlight = self.config.backlight;
                 if let Some(name) = &self.last_screen {
                     if let Some(i) = s.app.screens.iter().position(|sc| &sc.component.name == name) {
                         s.app.screen = i;

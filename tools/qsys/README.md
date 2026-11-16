@@ -201,8 +201,8 @@ rooted Gen 3 with SSH (unfr0zen's `--ssh`).
    `/tmp/nest-surface.log`.
 
    During the hand-over nlclient relights the display at its own brightness
-   every 2 s, so the surface leaves the backlight to it: Brightness, dimming
-   and Screen off do nothing then. `nest-surface.sh --exclusive CORE` stops
+   every 2 s, so the surface leaves the backlight to it: Settings hides
+   Brightness and Screen off then, and the home screen is not dimmed. `nest-surface.sh --exclusive CORE` stops
    nlclient instead (the thermostat does not run until the surface stops),
    and all of them work. The launcher's first line says which way it went.
 

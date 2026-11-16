@@ -10,7 +10,7 @@ use serde_json::Value;
 
 use std::cell::Cell;
 
-use crate::app::{App, Item, Layout, Mode, Screen, Settings, SettingsRow, SETTINGS, SETTINGS_ROWS};
+use crate::app::{App, Item, Layout, Mode, Screen, Settings, SettingsRow, SETTINGS};
 use crate::canvas::{mix, Canvas, Weight, FACE};
 
 const BG: u32 = 0x000000;
@@ -366,7 +366,7 @@ fn icon(canvas: &mut Canvas, kind: Icon, cx: f32, cy: f32, scale: f32, rgb: u32,
 /// The Settings list, as a drum of its rows.
 fn settings(app: &App, focus: usize, canvas: &mut Canvas, anim: &mut Anim) {
     canvas.text_centred(C, 58.0, "Settings", 20.0, Weight::Regular, 200.0, DIM);
-    let rows: Vec<String> = SETTINGS_ROWS.iter().map(|r| settings_row(&app.settings, *r)).collect();
+    let rows: Vec<String> = app.settings_rows().iter().map(|r| settings_row(&app.settings, *r)).collect();
     let pos = anim.drum("settings", rows.len(), focus);
     drum(canvas, &rows, pos, TRACK, FG);
     dots(focus, rows.len(), canvas);
