@@ -266,7 +266,9 @@ enum Icon {
 }
 
 /// How far apart the Controls list's icons sit, centre to centre.
-const CAROUSEL_STEP: f32 = 150.0;
+const CAROUSEL_STEP: f32 = 160.0;
+/// The middle icon's size, as a part of an icon's drawing (`icon`).
+const ICON_SCALE: f32 = 1.15;
 
 /// The Controls list, as a row of icons that slides left and right: the
 /// entry in the middle large with its title, its neighbours smaller and
@@ -289,7 +291,7 @@ fn menu(app: &App, focus: usize, canvas: &mut Canvas, anim: &mut Anim) {
         }
         let x = C + o * CAROUSEL_STEP + push;
         let near = (1.0 - o.abs()).clamp(0.0, 1.0);
-        let scale = 0.55 + 0.45 * near;
+        let scale = ICON_SCALE * (0.55 + 0.45 * near);
         let fade = ((1.6 - o.abs()) / 0.6).clamp(0.0, 1.0);
         let rgb = mix(BG, mix(DIM2, FG, near), fade);
         let accent = mix(BG, mix(DIM2, ACCENT, near), fade);
@@ -313,7 +315,7 @@ fn menu(app: &App, focus: usize, canvas: &mut Canvas, anim: &mut Anim) {
     dots(at, entries.len(), canvas);
     // A hold here on its way to leaving: the edge fills as it goes on.
     if let Some((_, progress)) = app.exit_hold {
-        canvas.arc(C, C, EDGE_R + 10.0, 8.0, -90.0, 360.0 * progress, RED);
+        canvas.arc(C, C, EDGE_R + 8.0, 14.0, -90.0, 360.0 * progress, RED);
         canvas.text_centred(C, 400.0, "Keep holding to exit", 19.0, Weight::Regular, 300.0, RED);
     }
 }

@@ -295,6 +295,13 @@ impl Framebuffer {
         self.pages
     }
 
+    /// Leaves what is shown on the display when dropped, rather than putting
+    /// back what was there before: leaving by a long hold shows "Exiting…"
+    /// until the thermostat draws over it.
+    pub fn keep_shown(&mut self) {
+        self.before = None;
+    }
+
     /// Shows the canvas: drawn into the page not shown, then panned to.
     pub fn show(&mut self, canvas: &Canvas) {
         match self.panel {

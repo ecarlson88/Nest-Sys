@@ -385,6 +385,12 @@ impl Runner {
         self.session.as_mut().map(|s| s.app.take_sounds()).unwrap_or_default()
     }
 
+    /// Draws the frame to leave on the display when leaving by a long hold,
+    /// until the thermostat draws over it.
+    pub fn draw_exiting(&mut self) {
+        status(&mut self.canvas, "Exiting…", "Back to the thermostat");
+    }
+
     /// Whether a long hold asked to leave the surface (front ends that can
     /// stop, the unit's, do; the screen goes back to what was there).
     pub fn quit(&self) -> bool {

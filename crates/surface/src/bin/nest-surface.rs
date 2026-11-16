@@ -176,6 +176,9 @@ mod unit {
             }
             if runner.quit() {
                 println!("nest-surface: left by a long hold");
+                runner.draw_exiting();
+                fb.show(&runner.canvas);
+                fb.keep_shown();
                 break;
             }
             if let Some(b) = &mut backlight {
