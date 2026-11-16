@@ -108,6 +108,17 @@ unit will tell.
   (source unknown; `ttymxc5` the lead; nlclient's log may name it).
   In hand-over mode the surface gets this for free (nlclient keeps the
   backlight); with `--exclusive` it would need the sensor read itself.
+- **Sensor names inside nlclient** (its program text, 2026-11-16):
+  `MSG_ALS`, `MSG_PIR`, `MSG_PIR_BUF`, `MSG_NEAR_PIR`, `ReceiveMsgProx`,
+  `ReadALSSensor`, `UpdateALSSummary`, `AmbientLightBin`,
+  `AmbientLightThreshold{High,Low}`, `BufferedProximity`, `mProxBuffer`,
+  `mTimeOfLastBuffered{ALS,PIR,Prox}`, `PIRState`, `Farsight`,
+  `FarsightLevel`, `nlWakeupReasonProx`, `Nest:Occupancy`,
+  `OccupancySummary`, `OccupancyScaleFactor`, `nlEventOccupancy`. So light
+  and presence (a far PIR and a near one) reach nlclient as messages,
+  presumably over `ttymxc5` from a microcontroller, and nlclient builds
+  occupancy from them. Next: the port's speed (`stty -F /dev/ttymxc5 -a`,
+  read-only), then capture on the sacrificial unit.
 - **Sleep while the surface runs:** nlclient's log (`/var/log/nlclient`)
   shows "client: AttemptToSleep denied - reason:
   mClientGlobals->IsUserInterfaceActive()". During the hand-over the
