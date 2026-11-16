@@ -72,8 +72,10 @@ unit will tell.
   IIO ADC `2284000.adc` has four unexplained channels (`in_voltage0..3_raw`);
   the ring is `2280000.adc`. **None of its four channels follows light
   or a hand** (Erik covered the front, uncovered it and shone a torch on
-  it, 2026-11-16): not the light or proximity sensor. One sometimes drops
-  into the 800s, cause unknown (a supply voltage under load?). Still to
+  it, 2026-11-16): not the light or proximity sensor. Channel 2 follows the
+  ring: steady at rest, swinging while it turns, settling at a new level
+  where it stops (2869, 2715, 2438): a raw angle sensor, it seems. Channel
+  3 dips between ~1400 and ~960 at random (unknown); 0 and 1 hold steady. Still to
   probe: the serial ports nlclient holds (a sensor microcontroller would
   talk to it over one).
 - The backlight driver logs "Setting ramp_rise_time 250 msec / ramp_fall_time
