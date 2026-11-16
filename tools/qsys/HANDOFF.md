@@ -75,9 +75,13 @@ unit will tell.
   it, 2026-11-16): not the light or proximity sensor. Channel 2 follows the
   ring: steady at rest, swinging while it turns, settling at a new level
   where it stops (2869, 2715, 2438): a raw angle sensor, it seems. Channel
-  3 dips between ~1400 and ~960 at random (unknown); 0 and 1 hold steady. Still to
-  probe: the serial ports nlclient holds (a sensor microcontroller would
-  talk to it over one).
+  3 dips between ~1400 and ~960 at random (unknown); 0 and 1 hold steady. Serial ports:
+  `ttymxc0` (the console), `ttymxc1`, `ttymxc4`, `ttymxc5`; **nlclient holds
+  only `/dev/ttymxc5`**, presumably its link to the backplate (unconfirmed;
+  on USB power nothing answers, hence "reconnect to base"?). Whether the
+  head's light and proximity sensors come through it is unknown. Reading it
+  while nlclient runs would steal its bytes: listen on the sacrificial unit
+  with nlclient stopped (`--exclusive`).
 - The backlight driver logs "Setting ramp_rise_time 250 msec / ramp_fall_time
   2000 msec" on every write; the first backlight build rewrote it every 2 s
   (its check), now compared with what the driver reads back.
