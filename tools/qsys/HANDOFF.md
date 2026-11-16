@@ -70,8 +70,12 @@ unit will tell.
   ambient light are not kernel devices; probably behind a microcontroller
   (the teardown's STM32?) talking to nlclient over serial: unconfirmed. An
   IIO ADC `2284000.adc` has four unexplained channels (`in_voltage0..3_raw`);
-  the ring is `2280000.adc`. Being probed: the serial ports nlclient holds,
-  and whether an ADC channel follows light or a hand.
+  the ring is `2280000.adc`. **None of its four channels follows light
+  or a hand** (Erik covered the front, uncovered it and shone a torch on
+  it, 2026-11-16): not the light or proximity sensor. One sometimes drops
+  into the 800s, cause unknown (a supply voltage under load?). Still to
+  probe: the serial ports nlclient holds (a sensor microcontroller would
+  talk to it over one).
 - The backlight driver logs "Setting ramp_rise_time 250 msec / ramp_fall_time
   2000 msec" on every write; the first backlight build rewrote it every 2 s
   (its check), now compared with what the driver reads back.
