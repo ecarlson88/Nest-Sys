@@ -8,8 +8,19 @@ are in [HANDOFF.md](HANDOFF.md).
 
 ## The plan
 
-The Nest acts as a panel for a **Global Scripter** program on an Extron
-Pro Series processor, the way a TouchLink Pro panel does:
+**Lead route: an Extron control module for the Nest, used from Global
+Configurator.** GC programs devices through control modules. A module for
+the Nest would let a GC programmer add the Nest like any device: each
+control is a status GC can trigger on (the Nest reporting a press or a
+turn) and a command GC can send (lighting a toggle, setting a level, even
+from another device's feedback). Erik confirmed in GC Pro that both work
+with device modules. What is not known yet is whether we can write a
+module at all: that needs real module files to read (HANDOFF.md, "Global
+Configurator: a control module for the Nest").
+
+**Second route, if modules cannot be authored or fall short:** the Nest
+as a panel for a **Global Scripter** program on an Extron Pro Series
+processor, the way a TouchLink Pro panel does:
 
 - A ControlScript (Python) module, shipped from this repository, is added
   to the Global Scripter project. It makes the Nest look like a panel: the
@@ -18,10 +29,8 @@ Pro Series processor, the way a TouchLink Pro panel does:
 - The Nest connects to the processor over TCP, draws each ID's control on
   the round screen, and reports the ring and click back as events.
 
-Doing the same inside Global Configurator itself would most likely need
-the Nest to pass as a real TouchLink panel, whose protocol is not public.
-Whether GC Pro can reach the Nest some other way is open (HANDOFF.md,
-"Global Configurator").
+Making the Nest pass as a real TouchLink panel in GC is ruled out: that
+protocol is not public.
 
 ## Decisions so far
 
@@ -29,8 +38,9 @@ Whether GC Pro can reach the Nest some other way is open (HANDOFF.md,
   surface it builds on is only there.
 - Extron gets **a program of its own** on the unit (`nest-extron`), as
   OpenAVC does, not a mode of `nest-surface`.
-- Global Scripter, not Global Configurator. Access to Global Scripter is
-  still to be confirmed (Erik is certified up to GC Pro).
+- Global Configurator through a control module first (Erik is certified
+  up to GC Pro); Global Scripter second, its access still to be
+  confirmed.
 - Where each ID's control is defined is **not decided**; the
   recommendation is in the script (HANDOFF.md, "Open questions").
 
@@ -40,6 +50,7 @@ Nothing below exists yet.
 
 | Path | What |
 |---|---|
+| `tools/extron/module/` | The Nest's control module for GC, in whatever form modules take (to be learned from real ones). |
 | `tools/extron/nest_panel.py` | The ControlScript module: the TCP server on the processor and the Nest's controls by ID. |
 | `tools/extron/mock_processor.py` | Runs the module on a PC with stand-ins for ControlScript, so both ends can be tested without a processor. |
 | `crates/extron` | The Nest's client for the module's protocol, mapped onto the surface's screens. The counterpart of `crates/qsys`. |
