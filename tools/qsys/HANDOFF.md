@@ -121,6 +121,20 @@ unit will tell.
   hardware flow control (`crtscts`), raw** (`stty -F /dev/ttymxc5 -a`,
   read-only). Next: capture on the sacrificial unit with nlclient
   stopped.
+- **First capture on the sacrificial unit (2026-11-20, USB power only)
+  [verified]:** with nlclient stopped, `ttymxc5` set as above, 30 s of
+  `cat` read **0 bytes**, no error, while Erik covered the front, lit it
+  and walked away and back. Expected if `ttymxc5` is the base's link;
+  inconclusive for the sensors. Next: the same capture on a powered base
+  (24 V AC; Erik is getting an adapter, as whether the base takes 24 V DC
+  is unknown).
+- **Stopping nlclient [verified, 2026-11-20]:** it ignores SIGTERM (five
+  `kill`s a second apart left it running) and stops on SIGKILL; after
+  `monit unmonitor nlclient` nothing starts it again. The launcher's
+  `--exclusive` (five TERMs, then KILL) therefore works, taking ~6 s. A
+  `cat` started while nlclient still ran ended at once with nothing read.
+  The USB shell stayed up the ~40 s nlclient was stopped (too short to say
+  whether the unit sleeps).
 - **Sleep while the surface runs:** nlclient's log (`/var/log/nlclient`)
   shows "client: AttemptToSleep denied - reason:
   mClientGlobals->IsUserInterfaceActive()". During the hand-over the
@@ -142,7 +156,11 @@ unit will tell.
   Keep surface runs on it short until it is known which way the launcher
   took the screen: with nlclient's hand-over the heating keeps running;
   without it nlclient is stopped. The launcher now says which. Sleep and
-  USB-only power are to be tested on a second, sacrificial unit (coming).
+  USB-only power are to be tested on a second, sacrificial unit.
+- **The sacrificial unit (since 2026-11-20):** gen 3, NAND backed up,
+  patched with unfr0zen v0.5.1: USB console and Doom; no MQTT, Zigbee or
+  backplate simulator. Not on a Nest account; Erik is putting it on his
+  house base for a while to join it to Wi-Fi.
 - Frame times on the unit: drawing the pattern ~12 ms, laying out for the
   turned panel and showing ~19 ms (the desktop: ~1 ms), so about 30 frames
   a second; the layout is worth speeding up.

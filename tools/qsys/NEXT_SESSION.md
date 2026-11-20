@@ -175,6 +175,9 @@ what it calls them; then, on the sacrificial unit with `--exclusive`
 light to the Core (e.g. as controls of a NEST_ component) and use presence
 to wake the surface.
 
+2026-11-20: on USB power alone `ttymxc5` read nothing in 30 s with
+nlclient stopped (HANDOFF.md). Next: repeat on a powered base (24 V AC).
+
 ## Later: power from USB alone (Erik's wish, 2026-11-14)
 
 Erik wants the unit to run from its USB port only, without the base's 24 V
