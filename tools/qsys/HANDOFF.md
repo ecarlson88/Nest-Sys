@@ -171,6 +171,39 @@ unit will tell.
   `strace`, `ltrace`, `gdb` or `busybox`, and no `/sys/power/wake_lock`
   (`/sys/power` has `pm_async`, `pm_freeze_timeout`, `pm_print_times`,
   `pm_test`, `state`, `wakeup_count`).
+- **nlclient's side of `ttymxc5`, traced [verified, 2026-11-21]:** a
+  static `strace` 6.1 (built from Debian's source with zig, bundled kernel
+  headers; copied to `/nestlabs/sbin/strace`) attached to the running
+  nlclient (`-f -p PID -P /dev/ttymxc5 -P /dev/ttymxc4 -tt -xx -s 4096 -e
+  trace=read,write,readv,writev,ioctl`) for 60 s: dark 20 s, a lamp on 20
+  s, off 20 s, nobody in the room. Only fd 66 (`ttymxc5`) had traffic;
+  `ttymxc4` none. nlclient's command line: `/nestlabs/sbin/nlclient
+  -config /nestlabs/etc/client.config -config /nestlabs/etc/product.config`.
+  - **The host's frames start with `d5 aa 96`** (one `d5`; the base's have
+    two), then type, length and CRC as the base's. nlclient reads a byte
+    at a time with `FIONREAD`. 204 frames, every CRC good.
+  - **Ambient light is type `0x0a`, first u16 [verified]:** 0-2 in the
+    dark, 0x36-0x38 (54-56) with the lamp on, following the lamp within
+    ~3 s each way (`05`, `37` ... `32`, `0c`, `02`, `01`, `00`).
+  - **`0x15` (6 x i16, as 3 pairs) wakes after a set-up burst:** all zero
+    until nlclient sent, at one point (cause unknown, mid-trace): `0xc2`
+    `00 00 00 80 00 80`, `0xb7` `64 00`, `0xb6` `64 00 64 00 d4 ff bb
+    ff`, `0xb3` `ff ff ff ff`, `0xb9` `00 00 ff ff`, `0xba` six zeros,
+    `0xa4` `ef 0f`, `0xa1` `fe 0d`, then `tcdrain`. After it `0x15`
+    swings, most around the lamp switching on and off: likely the PIR
+    elements (a PIR also reacts to a sudden change of light). So the zeros
+    without nlclient are sensors not set up, and this burst is the likely
+    start-up to replay.
+  - `0x16` (1 byte: `01 02 04 08 14 20`, bit flags?) comes in bursts with
+    `0x15`'s swings: a presence event candidate. `0x05` (4 bytes) changes
+    with them too.
+  - Polls: host `0xa2` -> base `0x22`, `0xa3` -> `0x23`, then `0x24`,
+    `0x2b`, `0x0c`, `0x38`, `0x2f` (status; reply type = request - 0x80
+    where seen). Host `0x83` (no payload) every ~15-30 s; host `0xb1` (no
+    payload) often, ~1 s apart at times. Meanings unknown.
+  - Guesses, unverified: `0x02`/`0x22` `61 08 6e 01` = 21.45 C and 36.6%
+    humidity (first capture `fa 07 70 01`: 20.42 C, 36.8%); `0x23` three
+    more temperatures (24.62, 22.50, 22.66?).
 - **Sleep while the surface runs:** nlclient's log (`/var/log/nlclient`)
   shows "client: AttemptToSleep denied - reason:
   mClientGlobals->IsUserInterfaceActive()". During the hand-over the

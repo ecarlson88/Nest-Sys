@@ -180,6 +180,10 @@ nlclient stopped (HANDOFF.md). Next: repeat on a powered base (24 V AC).
 2026-11-21: on a powered base it sends framed messages unasked
 (format and checksum in HANDOFF.md). Next: timed captures (still, covered,
 lit, approach) to tie message types to light and presence.
+2026-11-21, later: nlclient traced with strace while running (HANDOFF.md):
+light found (`0x0a`), the host's frames and a set-up burst that wakes the
+PIR data. Next: a presence trace with Erik in the room; then try replaying
+the set-up with nlclient stopped (and the unit held awake).
 
 ## Later: power from USB alone (Erik's wish, 2026-11-14)
 
