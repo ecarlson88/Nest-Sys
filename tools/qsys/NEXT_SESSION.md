@@ -177,6 +177,9 @@ to wake the surface.
 
 2026-11-20: on USB power alone `ttymxc5` read nothing in 30 s with
 nlclient stopped (HANDOFF.md). Next: repeat on a powered base (24 V AC).
+2026-11-21: on a powered base it sends framed messages unasked
+(format and checksum in HANDOFF.md). Next: timed captures (still, covered,
+lit, approach) to tie message types to light and presence.
 
 ## Later: power from USB alone (Erik's wish, 2026-11-14)
 

@@ -135,6 +135,19 @@ unit will tell.
   `cat` started while nlclient still ran ended at once with nothing read.
   The USB shell stayed up the ~40 s nlclient was stopped (too short to say
   whether the unit sleeps).
+- **`ttymxc5` on a powered base talks unasked [verified, 2026-11-21]:**
+  the sacrificial unit on its base at 24 V AC (a wiring error shown: no
+  heating or cooling wires), nlclient stopped, 30 s of `cat`: 1106 bytes,
+  ~1 frame pair a second. Frame: `d5 d5 aa 96`, type (u16 LE), length
+  (u16 LE), payload, CRC-16/XMODEM (poly 0x1021, init 0, LE) over type,
+  length and payload; all 53 frames parsed check. Seen: `0x0a` (4 bytes,
+  all zero) and `0x15` (12 bytes, all zero), each about once a second;
+  `0x02` once at the start (`fa 07 70 01`: 2042, 368?); `0x0b` once (16
+  bytes: `01 16 0a 00 00 00 00 00` then u16s 3566, 4665, 3934, 5652);
+  `0x16` (1 byte) three times near the end, `20`, `20`, `02`, while Erik
+  covered, lit, left and came back. Meanings unknown; `0x16` is the
+  candidate for presence. Whether the sensors sit in the base or the head
+  is still unknown: on USB alone the line was silent either way.
 - **Sleep while the surface runs:** nlclient's log (`/var/log/nlclient`)
   shows "client: AttemptToSleep denied - reason:
   mClientGlobals->IsUserInterfaceActive()". During the hand-over the
@@ -159,7 +172,8 @@ unit will tell.
   USB-only power are to be tested on a second, sacrificial unit.
 - **The sacrificial unit (since 2026-11-20):** gen 3, NAND backed up,
   patched with unfr0zen v0.5.1: USB console and Doom; no MQTT, Zigbee or
-  backplate simulator. Not on a Nest account; Erik is putting it on his
+  backplate simulator. Nest firmware 6.3-5, as Erik's house unit. Erik's
+  goal for it: run from USB alone, without a base or 24 V, in normal use. Not on a Nest account; Erik is putting it on his
   house base for a while to join it to Wi-Fi.
 - Frame times on the unit: drawing the pattern ~12 ms, laying out for the
   turned panel and showing ~19 ms (the desktop: ~1 ms), so about 30 frames
