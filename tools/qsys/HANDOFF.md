@@ -164,6 +164,13 @@ unit will tell.
 - **Stopping nlclient lets the unit sleep and SSH die [seen again,
   2026-11-21]:** after the capture SSH reset and then timed out until Erik
   woke the unit at the ring; nlclient was found running afterwards.
+- **nlclient holds two serial ports on the sacrificial unit, on its base
+  [verified, 2026-11-21]:** `/proc/$(pidof nlclient)/fd` shows fd 39 ->
+  `/dev/ttymxc4` and fd 66 -> `/dev/ttymxc5` (on Erik's house unit only
+  `ttymxc5` was seen). What `ttymxc4` is for is unknown. The unit has no
+  `strace`, `ltrace`, `gdb` or `busybox`, and no `/sys/power/wake_lock`
+  (`/sys/power` has `pm_async`, `pm_freeze_timeout`, `pm_print_times`,
+  `pm_test`, `state`, `wakeup_count`).
 - **Sleep while the surface runs:** nlclient's log (`/var/log/nlclient`)
   shows "client: AttemptToSleep denied - reason:
   mClientGlobals->IsUserInterfaceActive()". During the hand-over the
