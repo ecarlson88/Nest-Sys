@@ -149,6 +149,21 @@ unit will tell.
   nothing he did caused the `0x16`s, and zeros in `0x15` may be darkness.
   Meanings unknown. Whether the sensors sit in the base or the head
   is still unknown: on USB alone the line was silent either way.
+- **The base resets and then goes quiet [verified, 2026-11-21]:** a second
+  capture (nlclient stopped again, dark room) streamed `0x0a`/`0x15` as
+  before for ~10 s, then sent `0x17` (`20 00`), then text messages (type
+  `0x01`, ASCII): `BRK`, three zero bytes, `1.5.39 2023-09-08 01:42:59 K`
+  (the base's firmware, it seems), `0x04` and `0x09` status frames, and
+  `*sense 00a9 0999 0000 0000 0000 0000 0000 0000 07e2 0808 0808; detect
+  05c0 0304` (wire sensing?). After that **nothing for 30 s**: the base
+  seems to wait for the host to start it, which nlclient does. One frame
+  lost a byte (`d5 aa 96`), so reads can drop bytes. Why it reset (a
+  watchdog on host silence, or the break) is unknown. So reading the
+  sensors without nlclient means speaking the host's side; next, learn it
+  by tracing nlclient's reads and writes on `ttymxc5` while it runs.
+- **Stopping nlclient lets the unit sleep and SSH die [seen again,
+  2026-11-21]:** after the capture SSH reset and then timed out until Erik
+  woke the unit at the ring; nlclient was found running afterwards.
 - **Sleep while the surface runs:** nlclient's log (`/var/log/nlclient`)
   shows "client: AttemptToSleep denied - reason:
   mClientGlobals->IsUserInterfaceActive()". During the hand-over the
