@@ -144,9 +144,10 @@ unit will tell.
   all zero) and `0x15` (12 bytes, all zero), each about once a second;
   `0x02` once at the start (`fa 07 70 01`: 2042, 368?); `0x0b` once (16
   bytes: `01 16 0a 00 00 00 00 00` then u16s 3566, 4665, 3934, 5652);
-  `0x16` (1 byte) three times near the end, `20`, `20`, `02`, while Erik
-  covered, lit, left and came back. Meanings unknown; `0x16` is the
-  candidate for presence. Whether the sensors sit in the base or the head
+  `0x16` (1 byte) three times near the end, `20`, `20`, `02`. Erik ran it
+  from another room: nobody in view and the room completely dark, so
+  nothing he did caused the `0x16`s, and zeros in `0x15` may be darkness.
+  Meanings unknown. Whether the sensors sit in the base or the head
   is still unknown: on USB alone the line was silent either way.
 - **Sleep while the surface runs:** nlclient's log (`/var/log/nlclient`)
   shows "client: AttemptToSleep denied - reason:
